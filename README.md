@@ -21,6 +21,7 @@ js/
 │   ├── cadastre.js       Parcel·les: per referència, polígon/parcel·la, punt o requadre
 │   ├── ubicacions.js     Províncies i municipis
 │   ├── mdt.js            Model Digital del Terreny (WCS de l'IDEE, una graella per petició)
+│   ├── generadorModel.js De zona a model 3D (MDT + sòlid + URL de l'ortofoto)
 │   ├── ortofoto.js       URL de l'ortofoto PNOA d'un requadre
 │   ├── escalaColor.js    Escales de color (altitud, pendent, ombres)
 │   └── magatzem.js       Embolcall d'IndexedDB
@@ -35,7 +36,7 @@ js/
 ├── ui/               Components amb DOM/Leaflet/Three.js
 │   ├── mapaBase.js       Mapa Leaflet amb OSM i ortofoto
 │   ├── dibuixPoligon.js  Dibuix de polígons
-│   ├── visor3d.js        Visor Three.js (r128)
+│   ├── visor3d.js        Visor Three.js (r128): ortofoto, altitud, pendent o neutre, i cotes
 │   ├── avisos.js         Notificacions breus
 │   └── descarrega.js     Desar fitxers generats
 └── i18n/             i18n.js (català com a clau) + es.js
@@ -57,10 +58,11 @@ eines/
 
 Bona part del codi ve de Custòdia (`cadastre.js`, `ubicacions.js`,
 `escalaColor.js`, `i18n.js`, el visor 3D). Custòdia ja en consumeix
-Cadastre, ubicacions, MDT, escales de color, traduccions i estils (la
-disposició de barra superior i panell flotant ve de Terra 3D); el seu
-visor 3D continua sent propi, perquè mostra capes (pendent, cotes,
-agrupacions) que aquest no té.
+Cadastre, ubicacions, MDT, escales de color, traduccions, estils (la
+disposició de barra superior i panell flotant ve de Terra 3D) i el visor
+3D amb el generador de models (que també ve de Terra 3D; Terra 3D encara
+en té la seva còpia a js/serveis/generadorModel.js). Custòdia conserva el
+seu visor antic només per quan no hi ha connexió.
 
 ## Llicència
 
