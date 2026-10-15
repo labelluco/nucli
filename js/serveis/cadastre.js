@@ -22,7 +22,7 @@
 // té la mateixa cobertura, de manera que tot el càlcul es fa en un sol
 // sistema en metres.
 
-import { utmALatLng } from '../geometria/projeccio.js';
+import { utmALatLng, latLngAUtm } from '../geometria/projeccio.js';
 import { puntDinsPart } from '../geometria/poligon.js';
 
 const URL_CALLEJERO = 'https://ovc.catastro.meh.es/ovcservweb/OVCSWLocalizacionRC/OVCCallejero.asmx';
@@ -97,9 +97,11 @@ export class ServeiCadastre {
 
   /** Parcel·les dins d'un requadre lat/lng (vegeu l'avís sobre requadres grans). */
   static async consultarParcelesEnBBOX(minLat, minLng, maxLat, maxLng) {
-    const proj4 = globalThis.proj4;
-    const [minX, minY] = proj4('EPSG:4326', 'EPSG:25830', [minLng, minLat]);
-    const [maxX, maxY] = proj4('EPSG:4326', 'EPSG:25830', [maxLng, maxLat]);
+    // Per latLngAUtm, no proj4 directament: és qui registra EPSG:25830 a
+    // proj4. Si aquesta és la primera conversió de la pàgina (a Custòdia,
+    // el mapa de selecció), proj4 encara no la coneixeria.
+    const [minX, minY] = latLngAUtm([minLat, minLng]);
+    const [maxX, maxY] = latLngAUtm([maxLat, maxLng]);
     const xml = await ServeiCadastre._consultarWfsBbox(minX, minY, maxX, maxY, 300);
     return perNom(xml, 'CadastralParcel').map((node) => {
       const parcela = ServeiCadastre._llegirParcela(node);
@@ -161,7 +163,12 @@ export class ServeiCadastre {
     }
     const principal = totes.find((node) => textDe(node, 'car') === '0000') ?? totes[0];
     const referenciaCadastral = ServeiCadastre._referenciaDeNode(perNom(principal, 'rc')[0]);
-    const descripcio = await ServeiCadastre._consultarDescripcio(referenciaCadastral).catch(() => ({}));
+    // La descripció es demana amb la referència de 18 caràcters (14 + el
+    // "car" de la unitat rústica), com feia Custòdia: identifica la unitat
+    // concreta, mentre que amb la de 14 el Cadastre pot tornar a respondre
+    // amb la llista d'unitats, sense ús ni subparcel·les.
+    const car = textDe(principal, 'car') ?? '';
+    const descripcio = await ServeiCadastre._consultarDescripcio(`${referenciaCadastral}${car}`).catch(() => ({}));
     return { referenciaCadastral, ...descripcio };
   }
 

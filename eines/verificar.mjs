@@ -18,7 +18,7 @@ const error = (text) => {
 };
 
 // Fitxers que formen part de l'app publicada (no eines ni documentació).
-const IGNORATS = /^(\.git|\.claude|node_modules|eines|nucli[\\/]eines|proves)([\\/]|$)|(^|[\\/])(README\.md|LICENSE|VERSIO|\.gitignore|.*\.sh|.*\.mjs)$/;
+const IGNORATS = /^(\.git|\.claude|node_modules|eines|nucli[\\/]eines|proves)([\\/]|$)|(^|[\\/])(README\.md|LLEGIU-ME\.\w+|LICENSE|VERSIO|\.gitignore|.*\.sh|.*\.mjs)$/;
 function llistar(dir) {
   return readdirSync(dir).flatMap((nom) => {
     const cami = join(dir, nom);
