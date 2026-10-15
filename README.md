@@ -56,8 +56,11 @@ eines/
 ## Procedència
 
 Bona part del codi ve de Custòdia (`cadastre.js`, `ubicacions.js`,
-`escalaColor.js`, `i18n.js`, el visor 3D). Custòdia encara no consumeix
-el nucli: la migració es farà en una ronda a part.
+`escalaColor.js`, `i18n.js`, el visor 3D). Custòdia ja en consumeix
+Cadastre, ubicacions, MDT, escales de color, traduccions i estils (la
+disposició de barra superior i panell flotant ve de Terra 3D); el seu
+visor 3D continua sent propi, perquè mostra capes (pendent, cotes,
+agrupacions) que aquest no té.
 
 ## Llicència
 
