@@ -209,3 +209,49 @@ export function trianglesModel(model, { transformar, zBase, ambLaterals = true }
 
   return { posicions, nSuperficie, nTriangles: posicions.length / 9 };
 }
+
+/**
+ * Gira un model (rotació rígida al voltant del centre del seu requadre) i
+ * en recalcula els límits. Les altituds no canvien. Serveix perquè una zona
+ * rectangular recta a la pantalla (nord geogràfic), que en UTM queda girada
+ * l'angle de convergència, surti recta al visor i al fitxer d'impressió.
+ *
+ * @param {ReturnType<typeof construirModel>} model
+ * @param {number} angle Radians, en sentit antihorari
+ * @returns {ReturnType<typeof construirModel> & {gir: {angle: number, cx: number, cy: number}}}
+ *   gir: el que cal per desfer-lo (vegeu desferGir), p. ex. per a la textura.
+ */
+export function girarModel(model, angle) {
+  const { limits } = model;
+  const cx = (limits.minX + limits.maxX) / 2;
+  const cy = (limits.minY + limits.maxY) / 2;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const vertexs = Float64Array.from(model.vertexs);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < vertexs.length; i += 3) {
+    const dx = vertexs[i] - cx;
+    const dy = vertexs[i + 1] - cy;
+    const x = cx + dx * cos - dy * sin;
+    const y = cy + dx * sin + dy * cos;
+    vertexs[i] = x;
+    vertexs[i + 1] = y;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return { ...model, vertexs, limits: { minX, minY, maxX, maxY }, gir: { angle, cx, cy } };
+}
+
+/** Punt del model girat -> punt original (abans de girarModel). */
+export function desferGir([x, y], { angle, cx, cy }) {
+  const cos = Math.cos(-angle);
+  const sin = Math.sin(-angle);
+  const dx = x - cx;
+  const dy = y - cy;
+  return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+}

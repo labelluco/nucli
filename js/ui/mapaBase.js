@@ -15,12 +15,23 @@ import { PAISOS } from '../paisos/paisos.js';
 const ATRIBUCIO_EOX =
   '<a href="https://s2maps.eu">Sentinel-2 cloudless 2016</a> &copy; <a href="https://eox.at">EOX</a> (Copernicus, CC BY 4.0)';
 
-export function crearMapaBase(idContenidor, { centre = [40.2, -1.2], zoom = 6, ambMon = false } = {}) {
+export function crearMapaBase(idContenidor, { centre = [40.2, -1.2], zoom = 6, ambMon = false, ambBruixola = false } = {}) {
   const mapa = L.map(idContenidor, { zoomControl: false, attributionControl: true, worldCopyJump: ambMon }).setView(
     centre,
     zoom
   );
   L.control.zoom({ position: 'topright' }).addTo(mapa);
+
+  // Brúixola: la mateixa que el visor 3D (classes de nucli.css). En un mapa
+  // 2D el nord sempre és amunt, així que no gira; l'app la situa amb CSS
+  // (classe .bruixola-mapa) on no topi amb els seus controls.
+  if (ambBruixola) {
+    const bruixola = document.createElement('div');
+    bruixola.className = 'bruixola-3d bruixola-mapa';
+    bruixola.setAttribute('aria-hidden', 'true');
+    bruixola.innerHTML = '<span class="bruixola-3d__fletxa">▲</span><span class="bruixola-3d__lletra">N</span>';
+    mapa.getContainer().appendChild(bruixola);
+  }
 
   const pnoa = L.tileLayer.wms('https://www.ign.es/wms-inspire/pnoa-ma?', {
     layers: 'OI.OrthoimageCoverage',

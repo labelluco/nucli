@@ -3,7 +3,7 @@
 // demana la graella del relleu amb marge, construeix el sòlid i prepara la
 // textura. Sense UI: informa del progrés amb un callback.
 import { Terreny } from '../geometria/terreny.js';
-import { construirModel } from '../geometria/solid.js';
+import { construirModel, girarModel, desferGir } from '../geometria/solid.js';
 import { limitsDeParts } from '../geometria/poligon.js';
 import { fontPer, fontMundial } from './fontsDades.js';
 
@@ -64,18 +64,34 @@ export async function generarModel(zona, detall, onProgres = () => {}) {
   // Es cedeix el fil un moment perquè la interfície pinti el missatge
   // abans del càlcul (que és síncron).
   await new Promise((resoldre) => setTimeout(resoldre, 30));
-  const model = construirModel(zona.parts, new Terreny(graella), pas);
+  const modelUtm = construirModel(zona.parts, new Terreny(graella), pas);
 
+  // La imatge es demana per al requadre del model en el sistema de la font
+  // (abans de qualsevol gir).
   const requadreTextura = {
-    minX: model.limits.minX - 1,
-    minY: model.limits.minY - 1,
-    maxX: model.limits.maxX + 1,
-    maxY: model.limits.maxY + 1,
+    minX: modelUtm.limits.minX - 1,
+    minY: modelUtm.limits.minY - 1,
+    maxX: modelUtm.limits.maxX + 1,
+    maxY: modelUtm.limits.maxY + 1,
   };
+  let textura = font.textura(requadreTextura);
+  let model = modelUtm;
+
+  // Zona girada respecte a la quadrícula (rectangle recte a la pantalla):
+  // es gira el model en sentit contrari perquè quedi recte. Cada vèrtex
+  // girat troba la seva coordenada de textura desfent el gir.
+  if (zona.rotacio) {
+    model = girarModel(modelUtm, -zona.rotacio);
+    const { minX, minY, maxX, maxY } = requadreTextura;
+    const uvOriginal =
+      textura.aUV ?? ((x, y) => [(x - minX) / (maxX - minX), (y - minY) / (maxY - minY)]);
+    textura = { ...textura, aUV: (x, y) => uvOriginal(...desferGir([x, y], model.gir)) };
+  }
+
   return {
     model,
     pas,
-    textura: font.textura(requadreTextura),
+    textura,
     font: { id: font.id, etiqueta: font.etiqueta, atribucio: font.atribucio },
   };
 }

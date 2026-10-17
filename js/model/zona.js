@@ -5,6 +5,9 @@
 //
 // crs: sistema de coordenades de les parts. Les zones desades abans que
 // existís (totes d'Espanya peninsular) no el porten: EPSG:25830.
+// rotacio: gir (radians) de la zona respecte a la quadrícula del crs que el
+// model ha de desfer perquè quedi recte (rectangles dibuixats rectes a la
+// pantalla; vegeu ui/dibuixRectangle.js). 0 per a la resta.
 
 export const ORIGENS_ZONA = ['referencia', 'poligon-parcela', 'mapa', 'dibuix'];
 
@@ -21,6 +24,7 @@ export class Zona {
     provincia = null,
     superficie = null,
     crs = 'EPSG:25830',
+    rotacio = 0,
     dataCreacio = new Date().toISOString(),
   }) {
     if (!ORIGENS_ZONA.includes(origen)) throw new Error(`Zona: origen desconegut "${origen}"`);
@@ -36,6 +40,7 @@ export class Zona {
     this.provincia = provincia;
     this.superficie = superficie;
     this.crs = crs;
+    this.rotacio = rotacio;
     this.dataCreacio = dataCreacio;
   }
 
