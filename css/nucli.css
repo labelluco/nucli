@@ -723,6 +723,20 @@ select.camp__entrada {
   cursor: crosshair;
 }
 
+/* Controlador per moure un rectangle dibuixat (DibuixRectangle). */
+.centre-dibuix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--color-primari);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: move;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
