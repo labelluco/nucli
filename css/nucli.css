@@ -751,6 +751,12 @@ select.camp__entrada {
   color: var(--color-primari);
 }
 
+/* Punt marcat per l'app (Visor3D.mostrarPunts): el mateix groc que el
+   marcador del punt d'observació al mapa de Terra Visibilitat. */
+.cota-3d--punt .cota-3d__icona {
+  color: #d9a21b;
+}
+
 /* --- Dibuix sobre el mapa --- */
 .vertex-dibuix {
   background-color: #fff;

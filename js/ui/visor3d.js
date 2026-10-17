@@ -15,7 +15,8 @@
 // Novetats: superfície i laterals en malles separades (la superfície
 // indexada, amb normals suaus; les parets amb normals planes), i quatre
 // capes: ortofoto PNOA com a textura, color per altitud, color per
-// pendent o neutre. Opcionalment, les cotes màxima i mínima (tija i etiqueta).
+// pendent o neutre. Opcionalment, les cotes màxima i mínima (tija i etiqueta)
+// i punts marcats per l'app (mostrarPunts: un punt d'observació, una antena...).
 import { t, idiomaActual } from '../i18n/i18n.js';
 import { colorAltitud, colorPendent } from '../serveis/escalaColor.js';
 import { trianglesModel } from '../geometria/solid.js';
@@ -36,6 +37,9 @@ export class Visor3D {
     this._ambCotes = false;
     this._grupCotes = null;
     this._etiquetesCotes = [];
+    this._punts = [];
+    this._grupPunts = null;
+    this._etiquetesPunts = [];
   }
 
   /**
@@ -124,6 +128,20 @@ export class Visor3D {
   mostrarCotes(mostrar) {
     this._ambCotes = mostrar;
     this._construirCotes();
+  }
+
+  /**
+   * Punts marcats sobre el relleu: una tija vertical amb una esfera al cap
+   * i una etiqueta HTML (classes .cota-3d i .cota-3d--punt de nucli.css).
+   * La tija fa l'alçada real del punt sobre el terreny (amb l'exageració),
+   * però com a mínim un 4 % de la mida del model: un pal de 10 m en un model
+   * de 4 km no es veuria. Per això l'etiqueta diu l'alçada real.
+   * @param {Array<{x: number, y: number, z: number, alcada?: number, etiqueta: string}>} punts
+   *   x, y en el sistema del model; z, altitud del terreny; alcada, metres sobre el terreny.
+   */
+  mostrarPunts(punts) {
+    this._punts = punts ?? [];
+    this._construirPunts();
   }
 
   /** Torna a la vista inicial. */
@@ -225,6 +243,7 @@ export class Visor3D {
     this._escena.add(this._grup);
     this.aplicarCapa(this._capa);
     this._construirCotes();
+    this._construirPunts();
   }
 
   /**
@@ -285,12 +304,54 @@ export class Visor3D {
     this._posicionarCotes();
   }
 
-  /** Situa cada etiqueta de cota sobre el cap de la seva tija, a la pantalla. */
+  _construirPunts() {
+    if (this._grupPunts) {
+      this._escena?.remove(this._grupPunts);
+      this._grupPunts.traverse((o) => {
+        o.geometry?.dispose();
+        o.material?.dispose();
+      });
+      this._grupPunts = null;
+    }
+    for (const { element } of this._etiquetesPunts ?? []) element.remove();
+    this._etiquetesPunts = [];
+    if (!this._punts?.length || !this._model || !this._escena) return;
+
+    const { limits } = this._model;
+    const mida = Math.max(limits.maxX - limits.minX, limits.maxY - limits.minY);
+    const transformar = this._transformar();
+    const exageracio = this._opcions.exageracio;
+    this._grupPunts = new THREE.Group();
+    const materialTija = new THREE.MeshBasicMaterial({ color: '#23261f', transparent: true, opacity: 0.8 });
+    const materialCap = new THREE.MeshStandardMaterial({ color: '#f2c14e', roughness: 0.6, emissive: '#5a4310' });
+    for (const { x: px, y: py, z: pz, alcada: alcadaReal = 0, etiqueta } of this._punts) {
+      const [x, y, z] = transformar(px, py, pz);
+      const alcada = Math.max(alcadaReal * exageracio, mida * 0.04);
+      const tija = new THREE.Mesh(new THREE.CylinderGeometry(mida * 0.002, mida * 0.002, alcada, 8), materialTija);
+      tija.position.set(x, z + alcada / 2, -y);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(mida * 0.007, 16, 12), materialCap);
+      cap.position.set(x, z + alcada, -y);
+      this._grupPunts.add(tija, cap);
+
+      const element = document.createElement('div');
+      element.className = 'cota-3d cota-3d--punt';
+      element.setAttribute('aria-hidden', 'true');
+      element.innerHTML = '<span class="cota-3d__icona">●</span>';
+      element.append(etiqueta);
+      this.contenidor.appendChild(element);
+      this._etiquetesPunts.push({ element, punt: new THREE.Vector3(x, z + alcada + mida * 0.01, -y) });
+    }
+    this._escena.add(this._grupPunts);
+    this._posicionarCotes();
+  }
+
+  /** Situa cada etiqueta (cotes i punts) sobre el cap de la seva tija, a la pantalla. */
   _posicionarCotes() {
-    if (!this._etiquetesCotes?.length || !this._camera) return;
+    const etiquetes = [...(this._etiquetesCotes ?? []), ...(this._etiquetesPunts ?? [])];
+    if (!etiquetes.length || !this._camera) return;
     const { clientWidth: amplada, clientHeight: alcada } = this.contenidor;
     const punt = new THREE.Vector3();
-    for (const { element, punt: origen } of this._etiquetesCotes) {
+    for (const { element, punt: origen } of etiquetes) {
       // Amb setViewOffset, la projecció de la càmera ja és la del canvas
       // visible: les coordenades normalitzades van de -1 a 1 sobre el canvas.
       punt.copy(origen).project(this._camera);
@@ -420,6 +481,14 @@ export class Visor3D {
     this._grupCotes = null;
     for (const { element } of this._etiquetesCotes ?? []) element.remove();
     this._etiquetesCotes = [];
+    this._grupPunts?.traverse((o) => {
+      o.geometry?.dispose();
+      o.material?.dispose();
+    });
+    this._grupPunts = null;
+    for (const { element } of this._etiquetesPunts ?? []) element.remove();
+    this._etiquetesPunts = [];
+    this._punts = [];
     this._grup = null;
     this._superficie = null;
     this._textura = null;
