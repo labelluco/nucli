@@ -77,5 +77,33 @@ export function crearMapaBase(idContenidor, { centre = [40.2, -1.2], zoom = 6, a
   };
   canviarCapa('ortofoto');
 
-  return { mapa, canviarCapa, capaActual: () => actual };
+  /**
+   * URL d'una sola tessel·la d'una capa al centre de la vista actual: per
+   * mostrar una miniatura de "l'altra capa" al botó que hi canvia (com fa
+   * Google Maps), sense haver de crear cap altre mapa.
+   */
+  const urlMiniatura = (nom) => {
+    const zoom = Math.max(2, Math.min(nom === 'mapa' ? 17 : 15, Math.round(mapa.getZoom())));
+    const tessela = mapa.project(mapa.getCenter(), zoom).divideBy(256).floor();
+    const total = 2 ** zoom;
+    const x = ((tessela.x % total) + total) % total;
+    const y = Math.max(0, Math.min(total - 1, tessela.y));
+    if (nom === 'mapa') return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+
+    const { lat, lng } = mapa.getCenter();
+    if (!ambMon || PAISOS.espanya.conte([lat, lng])) {
+      // PNOA: la mateixa tessel·la, demanada al WMS pel seu requadre Web Mercator.
+      const costat = 40075016.686 / total;
+      const minX = -20037508.343 + x * costat;
+      const maxY = 20037508.343 - y * costat;
+      return (
+        'https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+        '&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg' +
+        `&BBOX=${minX},${maxY - costat},${minX + costat},${maxY}`
+      );
+    }
+    return `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/${zoom}/${y}/${x}.jpg`;
+  };
+
+  return { mapa, canviarCapa, capaActual: () => actual, urlMiniatura };
 }
