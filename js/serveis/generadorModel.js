@@ -37,7 +37,9 @@ export function pasPerDetall(parts, detall, pasMinim = PAS_MINIM_METRES) {
  *   crs: sistema de les parts (per defecte EPSG:25830, com fins ara).
  * @param {string} detall
  * @param {(fase: 'terreny'|'model') => void} [onProgres]
- * @returns {Promise<{model: object, pas: number, textura: {url: string, requadre: object, aUV?: Function}, font: {id: string, etiqueta: string, atribucio: string}}>}
+ *   terreny: la graella del relleu (en el sistema de la font, sense el gir),
+ *   per si l'app hi ha de posar coses a sobre (un track al visor 3D).
+ * @returns {Promise<{model: object, pas: number, terreny: Terreny, textura: {url: string, requadre: object, aUV?: Function}, font: {id: string, etiqueta: string, atribucio: string}}>}
  */
 export async function generarModel(zona, detall, onProgres = () => {}) {
   const costat = costatMaxim(zona.parts);
@@ -64,7 +66,8 @@ export async function generarModel(zona, detall, onProgres = () => {}) {
   // Es cedeix el fil un moment perquè la interfície pinti el missatge
   // abans del càlcul (que és síncron).
   await new Promise((resoldre) => setTimeout(resoldre, 30));
-  const modelUtm = construirModel(zona.parts, new Terreny(graella), pas);
+  const terreny = new Terreny(graella);
+  const modelUtm = construirModel(zona.parts, terreny, pas);
 
   // La imatge es demana per al requadre del model en el sistema de la font
   // (abans de qualsevol gir).
@@ -91,6 +94,7 @@ export async function generarModel(zona, detall, onProgres = () => {}) {
   return {
     model,
     pas,
+    terreny,
     textura,
     font: { id: font.id, etiqueta: font.etiqueta, atribucio: font.atribucio },
   };

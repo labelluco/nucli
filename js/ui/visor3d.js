@@ -16,7 +16,8 @@
 // indexada, amb normals suaus; les parets amb normals planes), i quatre
 // capes: ortofoto PNOA com a textura, color per altitud, color per
 // pendent o neutre. Opcionalment, les cotes màxima i mínima (tija i etiqueta)
-// i punts marcats per l'app (mostrarPunts: un punt d'observació, una antena...).
+// i punts marcats per l'app (mostrarPunts: un punt d'observació, una antena...)
+// i línies que segueixen el relleu (mostrarLinies: un track, una ruta).
 //
 // Per a apps que mouen el sol (Terra Sol): establirSol() posa la llum
 // principal en la direcció del sol d'un instant, amb un disc que el
@@ -45,6 +46,8 @@ export class Visor3D {
     this._punts = [];
     this._grupPunts = null;
     this._etiquetesPunts = [];
+    this._linies = [];
+    this._grupLinies = null;
     this._sol = null;
   }
 
@@ -153,6 +156,22 @@ export class Visor3D {
   mostrarPunts(punts) {
     this._punts = punts ?? [];
     this._construirPunts();
+  }
+
+  /**
+   * Línies sobre el relleu (un track GPS, una ruta): un tub de color que
+   * passa pels punts donats. El tub té un gruix proporcional a la mida del
+   * model (un 0,25 %: uns 10 m en un model de 4 km), perquè una línia de
+   * WebGL fa sempre 1 píxel i no es veuria; per la mateixa raó el centre
+   * s'aixeca un radi sobre el terreny, o quedaria mig enterrat. Les
+   * altituds han de ser les del terreny (no les del GPS, que el farien
+   * surar o enfonsar-se), i s'hi aplica l'exageració del model.
+   * @param {Array<{punts: Array<{x: number, y: number, z: number}>, color?: string}>} linies
+   *   x, y en el sistema del model; z, altitud del terreny en aquell punt.
+   */
+  mostrarLinies(linies) {
+    this._linies = linies ?? [];
+    this._construirLinies();
   }
 
   /**
@@ -318,6 +337,7 @@ export class Visor3D {
     this.aplicarCapa(this._capa);
     this._construirCotes();
     this._construirPunts();
+    this._construirLinies();
   }
 
   /**
@@ -417,6 +437,44 @@ export class Visor3D {
     }
     this._escena.add(this._grupPunts);
     this._posicionarCotes();
+  }
+
+  _construirLinies() {
+    if (this._grupLinies) {
+      this._escena?.remove(this._grupLinies);
+      this._grupLinies.traverse((o) => {
+        o.geometry?.dispose();
+        o.material?.dispose();
+      });
+      this._grupLinies = null;
+    }
+    if (!this._linies?.length || !this._model || !this._escena) return;
+
+    const { limits } = this._model;
+    const mida = Math.max(limits.maxX - limits.minX, limits.maxY - limits.minY);
+    const radi = mida * 0.0025;
+    const transformar = this._transformar();
+    this._grupLinies = new THREE.Group();
+    for (const { punts, color = '#e8452c' } of this._linies) {
+      // Punts de l'escena (x, z, -y), sense repetits: un segment de
+      // longitud zero fa que el tub perdi l'orientació.
+      const vectors = [];
+      for (const { x: px, y: py, z: pz } of punts) {
+        const [x, y, z] = transformar(px, py, pz);
+        const v = new THREE.Vector3(x, z + radi, -y);
+        if (!vectors.length || vectors[vectors.length - 1].distanceToSquared(v) > 1e-6) vectors.push(v);
+      }
+      if (vectors.length < 2) continue;
+      const cami = new THREE.CurvePath();
+      for (let i = 1; i < vectors.length; i++) cami.add(new THREE.LineCurve3(vectors[i - 1], vectors[i]));
+      const segments = Math.min(6000, vectors.length * 2);
+      const tub = new THREE.Mesh(
+        new THREE.TubeGeometry(cami, segments, radi, 6, false),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.5, emissive: color, emissiveIntensity: 0.35 })
+      );
+      this._grupLinies.add(tub);
+    }
+    this._escena.add(this._grupLinies);
   }
 
   /** Situa cada etiqueta (cotes i punts) sobre el cap de la seva tija, a la pantalla. */
@@ -571,6 +629,12 @@ export class Visor3D {
     for (const { element } of this._etiquetesPunts ?? []) element.remove();
     this._etiquetesPunts = [];
     this._punts = [];
+    this._grupLinies?.traverse((o) => {
+      o.geometry?.dispose();
+      o.material?.dispose();
+    });
+    this._grupLinies = null;
+    this._linies = [];
     for (const objecte of [this._disc, this._raig]) {
       objecte?.geometry.dispose();
       objecte?.material.dispose();

@@ -41,7 +41,7 @@ js/
 ├── ui/               Components amb DOM/Leaflet/Three.js
 │   ├── mapaBase.js       Mapa Leaflet amb OSM i ortofoto
 │   ├── dibuixPoligon.js  Dibuix de polígons
-│   ├── visor3d.js        Visor Three.js (r128): ortofoto, altitud, pendent o neutre, cotes i punts marcats
+│   ├── visor3d.js        Visor Three.js (r128): ortofoto, altitud, pendent o neutre, cotes, punts marcats i línies (tracks)
 │   ├── avisos.js         Notificacions breus
 │   └── descarrega.js     Desar fitxers generats
 └── i18n/             i18n.js (català com a clau) + es.js
