@@ -32,6 +32,7 @@ js/
 │   ├── poligon.js        Àrees, orientació, neteja, densificació, punt dins
 │   ├── projeccio.js      lat/lng <-> UTM (30N per defecte, 28N Canàries, fus automàtic al món)
 │   ├── terreny.js        Graella d'altituds amb interpolació bilineal
+│   ├── gradients.js      Pendent i orientació per cel·la (mètode de Horn)
 │   └── solid.js          Model 3D: triangulació restringida + sòlid tancat
 ├── exportadors/      stl.js (binari, mm) · obj.js (metres, amb UV)
 ├── model/zona.js     Una zona (parcel·la o polígon dibuixat), amb el seu sistema (crs)
