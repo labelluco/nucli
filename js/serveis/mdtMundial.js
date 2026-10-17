@@ -92,14 +92,25 @@ export class ServeiMDTMundial {
     let zoom = zoomPer(pasMetres, latMitjana);
     let rang;
     for (;;) {
-      const pixels = nodes.map((node) => latLngAPixel(node, zoom));
-      const xs = pixels.map(([x]) => x);
-      const ys = pixels.map(([, y]) => y);
+      // Amb un bucle i no amb Math.min(...xs): una graella gran (Terra
+      // Visibilitat en demana de 600 × 600) passa del límit d'arguments
+      // d'una crida i llança un RangeError.
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const node of nodes) {
+        const [x, y] = latLngAPixel(node, zoom);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
       rang = {
-        tx0: Math.floor((Math.min(...xs) - 1) / MIDA_TESSELA),
-        tx1: Math.floor((Math.max(...xs) + 1) / MIDA_TESSELA),
-        ty0: Math.floor((Math.min(...ys) - 1) / MIDA_TESSELA),
-        ty1: Math.floor((Math.max(...ys) + 1) / MIDA_TESSELA),
+        tx0: Math.floor((minX - 1) / MIDA_TESSELA),
+        tx1: Math.floor((maxX + 1) / MIDA_TESSELA),
+        ty0: Math.floor((minY - 1) / MIDA_TESSELA),
+        ty1: Math.floor((maxY + 1) / MIDA_TESSELA),
       };
       const nombre = (rang.tx1 - rang.tx0 + 1) * (rang.ty1 - rang.ty0 + 1);
       if (nombre <= MAXIM_TESSELES || zoom === 0) break;
