@@ -165,13 +165,20 @@ export class Visor3D {
     const colorsPendent = new Float32Array(n * 3);
     const pendents = pendentsPerVertex(model);
     const requadreTextura = this._opcions.textura?.requadre;
+    const aUV = this._opcions.textura?.aUV;
     const color = new THREE.Color();
     for (let i = 0; i < n; i++) {
       const x = model.vertexs[i * 3];
       const y = model.vertexs[i * 3 + 1];
       const z = model.vertexs[i * 3 + 2];
       posicions.set(transformar(x, y, z), i * 3);
-      if (requadreTextura) {
+      if (aUV) {
+        // Imatges que no són en el sistema del model (Sentinel-2, en
+        // lat/lng): la font dona la coordenada de textura de cada vèrtex.
+        const [u, v] = aUV(x, y);
+        uvs[i * 2] = u;
+        uvs[i * 2 + 1] = v;
+      } else if (requadreTextura) {
         uvs[i * 2] = (x - requadreTextura.minX) / (requadreTextura.maxX - requadreTextura.minX);
         uvs[i * 2 + 1] = (y - requadreTextura.minY) / (requadreTextura.maxY - requadreTextura.minY);
       }
