@@ -17,6 +17,11 @@
 // capes: ortofoto PNOA com a textura, color per altitud, color per
 // pendent o neutre. Opcionalment, les cotes màxima i mínima (tija i etiqueta)
 // i punts marcats per l'app (mostrarPunts: un punt d'observació, una antena...).
+//
+// Per a apps que mouen el sol (Terra Sol): establirSol() posa la llum
+// principal en la direcció del sol d'un instant, amb un disc que el
+// representa, i la textura pot ser un canvas que l'app repinta i refresca
+// (refrescarTextura) sense tornar a carregar res.
 import { t, idiomaActual } from '../i18n/i18n.js';
 import { colorAltitud, colorPendent } from '../serveis/escalaColor.js';
 import { trianglesModel } from '../geometria/solid.js';
@@ -40,6 +45,7 @@ export class Visor3D {
     this._punts = [];
     this._grupPunts = null;
     this._etiquetesPunts = [];
+    this._sol = null;
   }
 
   /**
@@ -55,7 +61,9 @@ export class Visor3D {
 
   /**
    * @param {ReturnType<import('../geometria/solid.js').construirModel>} model
-   * @param {{exageracio?: number, gruixBaseMetres?: number, ambLaterals?: boolean, textura?: {url: string, requadre: object}|null, capa?: 'ortofoto'|'altitud'|'neutre'}} opcions
+   * @param {{exageracio?: number, gruixBaseMetres?: number, ambLaterals?: boolean, textura?: {url?: string, canvas?: HTMLCanvasElement, requadre: object}|null, capa?: 'ortofoto'|'altitud'|'neutre', direccioCamera?: number[]}} opcions
+   *   direccioCamera: d'on mira la càmera al principi, [x, y, z] de l'escena
+   *   (x = est, y = amunt, z = sud); per defecte, des del sud-est.
    */
   mostrar(model, opcions = {}) {
     this.destruir();
@@ -64,16 +72,17 @@ export class Visor3D {
     this._capa = opcions.capa ?? (opcions.textura ? 'ortofoto' : 'neutre');
 
     this._escena = new THREE.Scene();
-    this._escena.add(new THREE.HemisphereLight(0xffffff, 0xb3a98f, 0.6));
-    const sol = new THREE.DirectionalLight(0xffffff, 0.85);
-    sol.position.set(-0.5, 0.707, -0.5);
-    this._escena.add(sol);
+    this._llumCel = new THREE.HemisphereLight(0xffffff, 0xb3a98f, 0.6);
+    this._escena.add(this._llumCel);
+    this._llumSol = new THREE.DirectionalLight(0xffffff, 0.85);
+    this._llumSol.position.set(-0.5, 0.707, -0.5);
+    this._escena.add(this._llumSol);
     // Llum de farciment suau des del sud-est: sense ella, les parets que
     // no veuen el sol (les que es veuen des de la càmera inicial) queden
     // gairebé negres. No altera l'ombrejat del relleu, que domina el sol.
-    const farciment = new THREE.DirectionalLight(0xffffff, 0.25);
-    farciment.position.set(0.6, 0.3, 0.7);
-    this._escena.add(farciment);
+    this._llumFarciment = new THREE.DirectionalLight(0xffffff, 0.25);
+    this._llumFarciment.position.set(0.6, 0.3, 0.7);
+    this._escena.add(this._llumFarciment);
 
     const { clientWidth: amplada, clientHeight: alcada } = this.contenidor;
     this._camera = new THREE.PerspectiveCamera(40, amplada / Math.max(alcada, 1), 0.5, 200000);
@@ -96,6 +105,7 @@ export class Visor3D {
     this._ajustarCamera();
     this._carregarTextura();
     this._afegirBruixola();
+    this._aplicarSol();
 
     this._observador = new ResizeObserver(() => this._redimensionar());
     this._observador.observe(this.contenidor);
@@ -107,6 +117,7 @@ export class Visor3D {
     if (!this._model) return;
     Object.assign(this._opcions, opcions);
     this._construirMalles();
+    this._aplicarSol();
   }
 
   /** 'ortofoto' | 'altitud' | 'pendent' | 'neutre' */
@@ -142,6 +153,69 @@ export class Visor3D {
   mostrarPunts(punts) {
     this._punts = punts ?? [];
     this._construirPunts();
+  }
+
+  /**
+   * Il·luminació amb el sol d'un instant: la llum principal ve d'on és el
+   * sol, i un disc groc el marca al cel. Amb el sol sota l'horitzó només
+   * queda la llum tènue del cel. null torna a la llum fixa del nord-oest.
+   * L'ombra que fa el relleu (un turó que tapa el sol) no la calcula el
+   * visor: l'app la pot pintar a la textura.
+   * @param {{azimut: number, alcada: number}|null} sol graus (azimut des del nord, en sentit horari)
+   */
+  establirSol(sol) {
+    this._sol = sol;
+    this._aplicarSol();
+  }
+
+  /** Torna a pujar a la targeta gràfica una textura de canvas que l'app ha repintat. */
+  refrescarTextura() {
+    if (this._textura) this._textura.needsUpdate = true;
+  }
+
+  _aplicarSol() {
+    if (!this._llumSol) return;
+    const sol = this._sol;
+    if (!sol) {
+      this._llumSol.position.set(-0.5, 0.707, -0.5);
+      this._llumSol.intensity = 0.85;
+      this._llumCel.intensity = 0.6;
+      this._llumFarciment.intensity = 0.25;
+      if (this._disc) this._disc.visible = false;
+      if (this._raig) this._raig.visible = false;
+      return;
+    }
+    const az = (sol.azimut * Math.PI) / 180;
+    const alcada = (sol.alcada * Math.PI) / 180;
+    // (est, nord, amunt) del model -> (x, y, z) de l'escena = (est, amunt, -nord).
+    const direccio = new THREE.Vector3(Math.sin(az) * Math.cos(alcada), Math.sin(alcada), -Math.cos(az) * Math.cos(alcada));
+    this._llumSol.position.copy(direccio);
+    const dia = sol.alcada > 0;
+    // Prop de l'horitzó, la llum del sol és més feble (més atmosfera).
+    this._llumSol.intensity = dia ? 0.55 + 0.5 * Math.min(1, Math.sin(alcada) * 3) : 0;
+    this._llumCel.intensity = dia ? 0.5 : 0.22;
+    this._llumFarciment.intensity = 0;
+    if (!this._disc && this._model) {
+      const { limits } = this._model;
+      const mida = Math.max(limits.maxX - limits.minX, limits.maxY - limits.minY);
+      this._disc = new THREE.Mesh(new THREE.SphereGeometry(mida * 0.035, 24, 16), new THREE.MeshBasicMaterial({ color: '#ffd75e' }));
+      this._disc.userData.distancia = mida * 0.75;
+      // Una línia del mig del model fins al disc: d'on ve la llum, encara
+      // que el disc quedi davant o darrere del model.
+      this._raig = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+        new THREE.LineBasicMaterial({ color: '#d9a63a', transparent: true, opacity: 0.85 })
+      );
+      this._escena.add(this._disc, this._raig);
+    }
+    if (this._disc) {
+      // El mig del model, a mitja alçada del relleu (amb l'exageració).
+      const centre = new THREE.Vector3(0, ((this._model.altitudMaxima - this._model.altitudMinima) * this._opcions.exageracio) / 2, 0);
+      this._disc.position.copy(centre).addScaledVector(direccio, this._disc.userData.distancia);
+      this._disc.visible = sol.alcada > -1;
+      this._raig.geometry.setFromPoints([centre, this._disc.position]);
+      this._raig.visible = this._disc.visible;
+    }
   }
 
   /** Torna a la vista inicial. */
@@ -366,6 +440,14 @@ export class Visor3D {
   _carregarTextura() {
     const textura = this._opcions.textura;
     if (!textura) return;
+    if (textura.canvas) {
+      // Un canvas de l'app: es fa servir tal qual i es refresca amb refrescarTextura().
+      this._textura = new THREE.CanvasTexture(textura.canvas);
+      this._textura.encoding = THREE.sRGBEncoding;
+      this._textura.anisotropy = this._renderer.capabilities.getMaxAnisotropy();
+      this.aplicarCapa(this._capa);
+      return;
+    }
     new THREE.TextureLoader().setCrossOrigin('anonymous').load(
       textura.url,
       (carregada) => {
@@ -399,7 +481,7 @@ export class Visor3D {
 
     // Des del sud-est i una mica elevat: el sol ve del nord-oest, i així
     // el relleu es veu amb la llum "de cara", com en un mapa ombrejat.
-    const direccio = new THREE.Vector3(0.45, 0.6, 0.75).normalize();
+    const direccio = new THREE.Vector3(...(this._opcions.direccioCamera ?? [0.45, 0.6, 0.75])).normalize();
     this._controls.target.copy(esfera.center);
     this._camera.position.copy(esfera.center).addScaledVector(direccio, distancia);
     this._camera.near = distancia / 100;
@@ -489,6 +571,15 @@ export class Visor3D {
     for (const { element } of this._etiquetesPunts ?? []) element.remove();
     this._etiquetesPunts = [];
     this._punts = [];
+    for (const objecte of [this._disc, this._raig]) {
+      objecte?.geometry.dispose();
+      objecte?.material.dispose();
+    }
+    this._disc = null;
+    this._raig = null;
+    this._llumSol = null;
+    this._llumCel = null;
+    this._llumFarciment = null;
     this._grup = null;
     this._superficie = null;
     this._textura = null;
