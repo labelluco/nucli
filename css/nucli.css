@@ -710,6 +710,47 @@ select.camp__entrada {
   font-weight: 700;
 }
 
+/* Cotes màxima i mínima del visor 3D (ui/visor3d.js): una etiqueta per
+   punt, que el visor situa a cada fotograma amb transform (per això
+   left/top a 0). Mateix aspecte que la resta de controls flotants. */
+.cota-3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  margin-top: -4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radi-rodo);
+  background-color: var(--color-superficie-translucida);
+  box-shadow: var(--ombra);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cota-3d[hidden] {
+  display: none;
+}
+
+.cota-3d__icona {
+  font-size: 0.62rem;
+}
+
+.cota-3d--maxima .cota-3d__icona {
+  color: var(--color-accent);
+}
+
+.cota-3d--minima .cota-3d__icona {
+  color: var(--color-primari);
+}
+
 /* --- Dibuix sobre el mapa --- */
 .vertex-dibuix {
   background-color: #fff;

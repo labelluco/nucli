@@ -15,8 +15,8 @@
 // Novetats: superfície i laterals en malles separades (la superfície
 // indexada, amb normals suaus; les parets amb normals planes), i quatre
 // capes: ortofoto PNOA com a textura, color per altitud, color per
-// pendent o neutre. Opcionalment, agulles a les cotes màxima i mínima.
-import { t } from '../i18n/i18n.js';
+// pendent o neutre. Opcionalment, les cotes màxima i mínima (tija i etiqueta).
+import { t, idiomaActual } from '../i18n/i18n.js';
 import { colorAltitud, colorPendent } from '../serveis/escalaColor.js';
 import { trianglesModel } from '../geometria/solid.js';
 
@@ -35,6 +35,7 @@ export class Visor3D {
     this._marges = () => ({ esquerra: 0, dreta: 0, inferior: 0 });
     this._ambCotes = false;
     this._grupCotes = null;
+    this._etiquetesCotes = [];
   }
 
   /**
@@ -119,7 +120,7 @@ export class Visor3D {
     material.needsUpdate = true;
   }
 
-  /** Mostra o amaga les agulles de les cotes màxima (roja) i mínima (blava). */
+  /** Mostra o amaga les cotes màxima i mínima (tija i etiqueta amb l'altitud). */
   mostrarCotes(mostrar) {
     this._ambCotes = mostrar;
     this._construirCotes();
@@ -227,9 +228,14 @@ export class Visor3D {
   }
 
   /**
-   * Agulles (tija + cap) als vèrtexs d'altitud màxima i mínima, en
-   * coordenades de l'escena: (x, y, z) del model -> (x, z, -y), com fa el
-   * grup. Mida proporcional al model; es refan si canvia l'exageració.
+   * Cotes als vèrtexs d'altitud màxima i mínima: una tija fina a l'escena i,
+   * a dalt, una etiqueta HTML amb l'altitud ("▲ 727 m" / "▼ 710 m"), amb
+   * l'estil de la resta de la interfície (classes .cota-3d de nucli.css).
+   * L'etiqueta no és un objecte 3D: es recol·loca a cada fotograma
+   * projectant el cap de la tija a la pantalla (_posicionarCotes), i així
+   * sempre mira la càmera i el text es llegeix nítid a qualsevol zoom.
+   * Coordenades de l'escena: (x, y, z) del model -> (x, z, -y), com el grup.
+   * Mida proporcional al model; es refan si canvia l'exageració.
    */
   _construirCotes() {
     if (this._grupCotes) {
@@ -240,6 +246,8 @@ export class Visor3D {
       });
       this._grupCotes = null;
     }
+    for (const { element } of this._etiquetesCotes ?? []) element.remove();
+    this._etiquetesCotes = [];
     if (!this._ambCotes || !this._model || !this._escena) return;
 
     const { vertexs, limits } = this._model;
@@ -251,31 +259,47 @@ export class Visor3D {
     }
 
     const mida = Math.max(limits.maxX - limits.minX, limits.maxY - limits.minY);
-    const alcada = mida * 0.12;
-    const radiCap = mida * 0.025;
+    const alcada = mida * 0.08;
     const transformar = this._transformar();
     this._grupCotes = new THREE.Group();
+    const materialTija = new THREE.MeshBasicMaterial({ color: '#23261f', transparent: true, opacity: 0.7 });
 
-    const afegir = (i, colorCap) => {
+    const afegir = (i, tipus) => {
       const [x, y, z] = transformar(vertexs[i * 3], vertexs[i * 3 + 1], vertexs[i * 3 + 2]);
-      const agulla = new THREE.Group();
-      const tija = new THREE.Mesh(
-        new THREE.CylinderGeometry(radiCap * 0.12, radiCap * 0.12, alcada, 8),
-        new THREE.MeshStandardMaterial({ color: '#3a3a3a', roughness: 0.5 })
-      );
-      tija.position.y = alcada / 2;
-      const cap = new THREE.Mesh(
-        new THREE.SphereGeometry(radiCap, 16, 16),
-        new THREE.MeshStandardMaterial({ color: colorCap, roughness: 0.5 })
-      );
-      cap.position.y = alcada;
-      agulla.add(tija, cap);
-      agulla.position.set(x, z, -y);
-      this._grupCotes.add(agulla);
+      const tija = new THREE.Mesh(new THREE.CylinderGeometry(mida * 0.0015, mida * 0.0015, alcada, 6), materialTija);
+      tija.position.set(x, z + alcada / 2, -y);
+      this._grupCotes.add(tija);
+
+      // L'altitud real (sense exageració), que és la que surt al model.
+      const altitud = Math.round(vertexs[i * 3 + 2]).toLocaleString(idiomaActual());
+      const element = document.createElement('div');
+      element.className = `cota-3d cota-3d--${tipus}`;
+      element.setAttribute('aria-hidden', 'true');
+      element.innerHTML = `<span class="cota-3d__icona">${tipus === 'maxima' ? '▲' : '▼'}</span>${altitud} m`;
+      this.contenidor.appendChild(element);
+      this._etiquetesCotes.push({ element, punt: new THREE.Vector3(x, z + alcada, -y) });
     };
-    afegir(iMax, '#c0392b');
-    if (iMin !== iMax) afegir(iMin, '#2c5aa0');
+    afegir(iMax, 'maxima');
+    if (iMin !== iMax) afegir(iMin, 'minima');
     this._escena.add(this._grupCotes);
+    this._posicionarCotes();
+  }
+
+  /** Situa cada etiqueta de cota sobre el cap de la seva tija, a la pantalla. */
+  _posicionarCotes() {
+    if (!this._etiquetesCotes?.length || !this._camera) return;
+    const { clientWidth: amplada, clientHeight: alcada } = this.contenidor;
+    const punt = new THREE.Vector3();
+    for (const { element, punt: origen } of this._etiquetesCotes) {
+      // Amb setViewOffset, la projecció de la càmera ja és la del canvas
+      // visible: les coordenades normalitzades van de -1 a 1 sobre el canvas.
+      punt.copy(origen).project(this._camera);
+      const visible = punt.z < 1;
+      element.hidden = !visible;
+      if (!visible) continue;
+      element.style.transform =
+        `translate(${((punt.x + 1) / 2) * amplada}px, ${((1 - punt.y) / 2) * alcada}px) translate(-50%, -100%)`;
+    }
   }
 
   _carregarTextura() {
@@ -373,6 +397,7 @@ export class Visor3D {
     this._controls.update();
     this._actualitzarBruixola();
     this._renderer.render(this._escena, this._camera);
+    this._posicionarCotes();
   }
 
   destruir() {
@@ -393,6 +418,8 @@ export class Visor3D {
       o.material?.dispose();
     });
     this._grupCotes = null;
+    for (const { element } of this._etiquetesCotes ?? []) element.remove();
+    this._etiquetesCotes = [];
     this._grup = null;
     this._superficie = null;
     this._textura = null;
