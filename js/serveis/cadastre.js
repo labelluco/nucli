@@ -121,6 +121,26 @@ export class ServeiCadastre {
     });
   }
 
+  /**
+   * Parcel·les que toquen un requadre en metres ({minX, minY, maxX, maxY}
+   * en el sistema crs), amb les parts en aquest mateix sistema: és el que
+   * cal per creuar-les amb una línia (els tracks de Terra Rutes). El
+   * requadre ha de ser petit (uns 700 m de costat com a molt): si és gran,
+   * el WFS retorna 0 parcel·les sense cap error. Una parcel·la amb una
+   * geometria buida es descarta.
+   */
+  static async consultarParcelesEnRequadre({ minX, minY, maxX, maxY }, crs = EPSG_UTM, maxim = 1000) {
+    const xml = await ServeiCadastre._consultarWfsBbox(minX, minY, maxX, maxY, maxim, crs);
+    return perNom(xml, 'CadastralParcel').flatMap((node) => {
+      try {
+        const parcela = ServeiCadastre._llegirParcela(node, crs);
+        return [{ ...parcela, ...ServeiCadastre._desglossarReferencia(parcela.referenciaCadastral) }];
+      } catch {
+        return [];
+      }
+    });
+  }
+
   /** Noms de província i municipi a partir dels codis (vegeu Custòdia). */
   static async consultarNomsPerCodis(codiProvincia, codiMunicipi, referenciaCadastral) {
     const params = new URLSearchParams({
