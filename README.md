@@ -46,6 +46,8 @@ js/
 │   └── descarrega.js     Desar fitxers generats
 └── i18n/             i18n.js (català com a clau) + es.js
 css/nucli.css         Paleta i components
+img/abelluco/         Logotip de L'Abelluco (vectorial, del manual d'identitat): vertical,
+                      horitzontal, amb o sense lema, i l'abella sola
 eines/
 ├── verificar.mjs     Verificacions de cada ronda (executar des de l'app)
 └── servidor.mjs      Servidor estàtic per provar en local
