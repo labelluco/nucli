@@ -543,7 +543,9 @@ select.camp__entrada {
   bottom: 0;
   max-height: 72vh;
   overflow-y: auto;
-  padding: var(--espai-xs) var(--espai-s) calc(var(--espai-s) + env(safe-area-inset-bottom));
+  /* Al mòbil, l'atribució del mapa (per damunt del panell) ocupa el peu:
+     el marge de baix deixa l'última línia del panell fora de sota. */
+  padding: var(--espai-xs) var(--espai-s) calc(var(--espai-s) + 2.25rem + env(safe-area-inset-bottom));
   border-radius: var(--radi-gran) var(--radi-gran) 0 0;
   background-color: var(--color-superficie-translucida);
   box-shadow: var(--ombra-flotant);
@@ -691,6 +693,7 @@ select.camp__entrada {
 
 @media (min-width: 900px) {
   .panell {
+    padding-bottom: var(--espai-s);
     left: var(--espai-s);
     right: auto;
     top: calc(72px + env(safe-area-inset-top));
