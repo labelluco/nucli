@@ -25,6 +25,7 @@ js/
 │   ├── fontsDades.js     Quina font (relleu + imatge) toca a cada zona, segons el lloc
 │   ├── llocs.js          Cerca de llocs a tot el món (Nominatim, OpenStreetMap)
 │   ├── generadorModel.js De zona a model 3D (MDT + sòlid + URL de l'ortofoto)
+│   ├── mosaic.js         Exportació a una resolució triada i en peces (graella a trossos, talls)
 │   ├── ortofoto.js       URL de la PNOA (Espanya) o de Sentinel-2 2016 (món)
 │   ├── escalaColor.js    Escales de color (altitud, pendent, ombres)
 │   └── magatzem.js       Embolcall d'IndexedDB
@@ -34,7 +35,7 @@ js/
 │   ├── terreny.js        Graella d'altituds amb interpolació bilineal
 │   ├── gradients.js      Pendent i orientació per cel·la (mètode de Horn)
 │   └── solid.js          Model 3D: triangulació restringida + sòlid tancat
-├── exportadors/      stl.js (binari, mm) · obj.js (metres, amb UV)
+├── exportadors/      stl.js (binari, mm) · obj.js (metres, amb UV) · zip.js (sense compressió)
 ├── model/zona.js     Una zona (parcel·la o polígon dibuixat), amb el seu sistema (crs)
 ├── paisos/paisos.js  Països amb dades pròpies (Espanya) i la resta del món
 ├── pagaments/        GestorCompres + proveïdors (de moment, demo)
