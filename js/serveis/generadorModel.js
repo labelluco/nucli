@@ -80,7 +80,9 @@ export async function generarModel(zona, detall, onProgres = () => {}, { maxPixe
     maxX: modelUtm.limits.maxX + 1,
     maxY: modelUtm.limits.maxY + 1,
   };
-  let textura = font.textura(requadreTextura, maxPixelsTextura);
+  let textura = font.carregarTextura
+    ? await font.carregarTextura(requadreTextura, maxPixelsTextura)
+    : font.textura(requadreTextura, maxPixelsTextura);
   // Coordenades de textura en UTM, sense cap gir: un altre model de la
   // mateixa zona (p. ex. a una altra resolució, vegeu mosaic.js) hi troba
   // les seves desfent el seu propi gir.
