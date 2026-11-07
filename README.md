@@ -89,4 +89,15 @@ seu visor antic només per quan no hi ha connexió.
 
 ## Llicència
 
-**AGPL-3.0**. Vegeu [LICENSE](./LICENSE).
+**MPL-2.0** (Mozilla Public License 2.0). Vegeu [LICENSE](./LICENSE).
+
+Copyright © 2026 Mario Escuder Nebot.
+
+This Source Code Form is subject to the terms of the Mozilla Public License,
+v. 2.0. If a copy of the MPL was not distributed with this file, You can
+obtain one at https://mozilla.org/MPL/2.0/.
+
+Per què la MPL: els canvis al nucli continuen sent lliures i qualsevol hi
+pot col·laborar, però les apps que el fan servir poden tenir la seva pròpia
+llicència. Fins al 2026-11-07, el nucli era AGPL-3.0; les còpies que algú
+hagi rebut abans d'aquesta data conserven aquella llicència.
