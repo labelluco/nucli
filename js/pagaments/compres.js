@@ -415,6 +415,7 @@ export class GestorCompres {
  *  - "auto": Google Play a l'app d'Android que porti el connector i, a la
  *    resta (la web), Lemon Squeezy si l'app en passa la configuració
  *    (`lemon`) o la demostració si no (les apps que encara no en tenen).
+ *    Una app nativa sense el connector de Play continua amb la demostració.
  * Amb `lemon` però sense ids (encara no creats), la web no desbloqueja res:
  * comprar diu que el pagament web encara no està disponible.
  *
@@ -427,7 +428,10 @@ export function crearProveidor({ app, proveidor, lemon = null, productes = [] })
   if (proveidor === 'lemonsqueezy') return lemonSqueezy();
   if (proveidor === 'auto') {
     if (ProveidorPlay.disponible()) return new ProveidorPlay(app);
-    return lemon ? lemonSqueezy() : new ProveidorDemo(app);
+    // Dins d'una app nativa (Android) mai s'ofereix el pagament web: Google
+    // Play no permet cobrar continguts digitals fora de Play Billing.
+    const nativa = Boolean(globalThis.Capacitor?.isNativePlatform?.());
+    return lemon && !nativa ? lemonSqueezy() : new ProveidorDemo(app);
   }
   throw new Error(`crearProveidor: el proveïdor "${proveidor}" encara no està implementat`);
 }
