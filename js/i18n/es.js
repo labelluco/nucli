@@ -11,4 +11,5 @@ export const ES = {
   "Aquesta clau ja s'ha activat en el màxim de dispositius.": "Esta clave ya se ha activado en el máximo de dispositivos.",
   "Aquesta clau no és d'aquesta app.": "Esta clave no es de esta app.",
   "Enganxa la clau de llicència que vas rebre per correu i prem «Activar la clau».": "Pega la clave de licencia que recibiste por correo y pulsa «Activar la clave».",
+  'No s\'ha pogut carregar el generador de PDF. Comprova la connexió.': 'No se ha podido cargar el generador de PDF. Comprueba la conexión.',
 };

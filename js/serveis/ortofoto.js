@@ -26,6 +26,7 @@ const CRS_WMS_PNOA = { 'EPSG:25830': 'EPSG:25830', 'EPSG:32628': 'EPSG:4083' };
 
 // Textos d'atribució oficials de cada font (no es tradueixen).
 export const ATRIBUCIO_PNOA = 'PNOA © Instituto Geográfico Nacional (CC BY 4.0)';
+export const ATRIBUCIO_IGN_BASE = 'IGN-Base © Instituto Geográfico Nacional (CC BY 4.0)';
 export const ATRIBUCIO_SENTINEL2 =
   'Sentinel-2 cloudless 2016 by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016), CC BY 4.0';
 
@@ -100,6 +101,19 @@ const URL_WMTS_PNOA =
   '&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&format=image/jpeg';
 // L'IGN té la PNOA al WMTS fins al zoom 20 (comprovat el 2026-10-28).
 const ZOOM_MAXIM_WMTS = 20;
+// Les capes WMTS dels mapes dels informes (mapaTesseles). El mapa topogràfic
+// IGN-Base té tessel·les fins al zoom 17 (al 18 surten gairebé buides) i
+// també admet CORS (comprovat el 2026-11-16).
+const CAPES_WMTS = {
+  pnoa: { url: URL_WMTS_PNOA, zoomMaxim: ZOOM_MAXIM_WMTS },
+  ignBase: {
+    url:
+      'https://www.ign.es/wmts/ign-base?request=GetTile&service=WMTS&version=1.0.0' +
+      '&layer=IGNBaseTodo&style=default&tilematrixset=GoogleMapsCompatible&format=image/jpeg',
+    zoomMaxim: 17,
+  },
+};
+const RADI_TERRA = 6378137;
 const COSTAT_TESSELLA = 256;
 // Si en falten més d'aquesta part, la imatge no serveix (es farà amb el WMS).
 const FRACCIO_TESSELLES_FALLIDES_MAXIMA = 0.1;
@@ -164,6 +178,22 @@ export async function texturaPnoaTesseles(requadre, maxPixels, aLatLng) {
     if (Math.max(ample, alt) <= maxPixels) break;
   }
 
+  const canvas = await ajuntarTesseles(URL_WMTS_PNOA, zoom, x0, y0, ample, alt);
+  const blob = await new Promise((resoldre) => canvas.toBlob(resoldre, 'image/jpeg', 0.92));
+  return {
+    url: URL.createObjectURL(blob),
+    aUV: (x, y) => {
+      const [px, py] = pixelMercator(aLatLng([x, y]), zoom);
+      return [(px - x0) / ample, 1 - (py - y0) / alt];
+    },
+  };
+}
+
+/**
+ * Un canvas de ample x alt píxels amb les tessel·les que el cobreixen, des
+ * del píxel Web Mercator (x0, y0) d'un zoom. Falla si en falten massa.
+ */
+async function ajuntarTesseles(urlBase, zoom, x0, y0, ample, alt) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, ample);
   canvas.height = Math.max(1, alt);
@@ -173,7 +203,7 @@ export async function texturaPnoaTesseles(requadre, maxPixels, aLatLng) {
   const peticions = [];
   for (let ty = tessellesY[0]; ty <= tessellesY[1]; ty++) {
     for (let tx = tessellesX[0]; tx <= tessellesX[1]; tx++) {
-      const url = `${URL_WMTS_PNOA}&tilematrix=${zoom}&tilerow=${ty}&tilecol=${tx}`;
+      const url = `${urlBase}&tilematrix=${zoom}&tilerow=${ty}&tilecol=${tx}`;
       peticions.push(
         carregarImatge(url).then((imatge) =>
           ctx.drawImage(imatge, tx * COSTAT_TESSELLA - x0, ty * COSTAT_TESSELLA - y0)
@@ -184,15 +214,51 @@ export async function texturaPnoaTesseles(requadre, maxPixels, aLatLng) {
   const resultats = await Promise.allSettled(peticions);
   const fallides = resultats.filter((r) => r.status === 'rejected').length;
   if (fallides > resultats.length * FRACCIO_TESSELLES_FALLIDES_MAXIMA) {
-    throw new Error(`texturaPnoaTesseles: han fallat ${fallides} de ${resultats.length} tessel·les`);
+    throw new Error(`han fallat ${fallides} de ${resultats.length} tessel·les`);
   }
+  return canvas;
+}
 
-  const blob = await new Promise((resoldre) => canvas.toBlob(resoldre, 'image/jpeg', 0.92));
+/**
+ * Un mapa (ortofoto PNOA o topogràfic IGN-Base, Espanya) d'ample x alt
+ * metres al voltant d'un centre, fet amb tessel·les WMTS: és el que posen
+ * els informes. Les tessel·les ja són fetes i arriben en dècimes de segon;
+ * el WMS fa la imatge a cada petició i pot trigar mig minut.
+ *
+ * Les tessel·les són en Web Mercator, amb el nord geogràfic amunt. Per
+ * dibuixar-hi a sobre, aMetres passa un [lat, lng] a metres (x cap a l'est,
+ * y cap al nord) des del centre del mapa, a l'escala real de la latitud del
+ * centre: en uns quants quilòmetres, l'error d'escala del Mercator és de
+ * l'ordre del deu-mil·lèsim.
+ *
+ * @param {'pnoa'|'ignBase'} capa
+ * @param {[number, number]} centre [lat, lng]
+ * @param {{ample: number, alt: number, maxPixels?: number}} mida En metres; maxPixels: costat més llarg de la imatge
+ * @returns {Promise<{blob: Blob, requadre: {minX: number, minY: number, maxX: number, maxY: number}, aMetres: (p: [number, number]) => [number, number]}>}
+ */
+export async function mapaTesseles(capa, centre, { ample, alt, maxPixels = 1800 }) {
+  const { url, zoomMaxim } = CAPES_WMTS[capa];
+  const metresPerPixel = (z) => (2 * Math.PI * RADI_TERRA * Math.cos((centre[0] * Math.PI) / 180)) / (COSTAT_TESSELLA * 2 ** z);
+  // El zoom més alt amb què la imatge no passa de maxPixels de costat.
+  let zoom = zoomMaxim;
+  while (zoom > 1 && Math.max(ample, alt) / metresPerPixel(zoom) > maxPixels) zoom--;
+  const m = metresPerPixel(zoom);
+  const amplePx = Math.max(1, Math.round(ample / m));
+  const altPx = Math.max(1, Math.round(alt / m));
+  const [cx, cy] = pixelMercator(centre, zoom);
+  const x0 = Math.round(cx - amplePx / 2);
+  const y0 = Math.round(cy - altPx / 2);
+
+  const canvas = await ajuntarTesseles(url, zoom, x0, y0, amplePx, altPx);
+  const blob = await new Promise((resoldre) => canvas.toBlob(resoldre, 'image/jpeg', 0.88));
+  const mitjaX = (amplePx / 2) * m;
+  const mitjaY = (altPx / 2) * m;
   return {
-    url: URL.createObjectURL(blob),
-    aUV: (x, y) => {
-      const [px, py] = pixelMercator(aLatLng([x, y]), zoom);
-      return [(px - x0) / ample, 1 - (py - y0) / alt];
+    blob,
+    requadre: { minX: -mitjaX, maxX: mitjaX, minY: -mitjaY, maxY: mitjaY },
+    aMetres: (punt) => {
+      const [px, py] = pixelMercator(punt, zoom);
+      return [(px - x0) * m - mitjaX, mitjaY - (py - y0) * m];
     },
   };
 }

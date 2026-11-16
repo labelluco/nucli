@@ -22,7 +22,7 @@ const error = (text) => {
 // La versió Android (Capacitor) afegeix android/ (el projecte natiu), www/
 // (la còpia de l'app que va dins de l'APK) i la seva configuració: tampoc
 // no formen part de la web.
-const IGNORATS = /^(\.git|\.claude|node_modules|eines|nucli[\\/]eines|proves|android|www)([\\/]|$)|(^|[\\/])(README\.md|LLEGIU-ME\.\w+|LICENSE|VERSIO|\.gitignore|.*\.sh|.*\.mjs)$|^(package(-lock)?\.json|capacitor\.config\.json)$/;
+const IGNORATS = /^(\.git|\.claude|node_modules|eines|nucli[\\/]eines|proves|android|www)([\\/]|$)|(^|[\\/])(README\.md|AGENTS\.md|CLAUDE\.md|DECISIONS\.md|LLEGIU-ME\.\w+|LICENSE|VERSIO|\.gitignore|.*\.sh|.*\.mjs)$|^(package(-lock)?\.json|capacitor\.config\.json)$/;
 function llistar(dir) {
   return readdirSync(dir).flatMap((nom) => {
     const cami = join(dir, nom);
