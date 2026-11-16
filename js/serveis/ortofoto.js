@@ -234,7 +234,8 @@ async function ajuntarTesseles(urlBase, zoom, x0, y0, ample, alt) {
  * @param {'pnoa'|'ignBase'} capa
  * @param {[number, number]} centre [lat, lng]
  * @param {{ample: number, alt: number, maxPixels?: number}} mida En metres; maxPixels: costat més llarg de la imatge
- * @returns {Promise<{blob: Blob, requadre: {minX: number, minY: number, maxX: number, maxY: number}, aMetres: (p: [number, number]) => [number, number]}>}
+ * @returns {Promise<{imatge: {dades: string, ample: number, alt: number}, requadre: {minX: number, minY: number, maxX: number, maxY: number}, aMetres: (p: [number, number]) => [number, number]}>}
+ *   imatge: JPEG en data URL i mida en píxels, a punt per a informe.mapa().
  */
 export async function mapaTesseles(capa, centre, { ample, alt, maxPixels = 1800 }) {
   const { url, zoomMaxim } = CAPES_WMTS[capa];
@@ -250,11 +251,13 @@ export async function mapaTesseles(capa, centre, { ample, alt, maxPixels = 1800 
   const y0 = Math.round(cy - altPx / 2);
 
   const canvas = await ajuntarTesseles(url, zoom, x0, y0, amplePx, altPx);
-  const blob = await new Promise((resoldre) => canvas.toBlob(resoldre, 'image/jpeg', 0.88));
+  // toDataURL i no toBlob: el PDF necessita el data URL, i toBlob pot trigar
+  // un segon per imatge (mesurat el 2026-11-16; toDataURL, 10-30 ms).
+  const dades = canvas.toDataURL('image/jpeg', 0.88);
   const mitjaX = (amplePx / 2) * m;
   const mitjaY = (altPx / 2) * m;
   return {
-    blob,
+    imatge: { dades, ample: amplePx, alt: altPx },
     requadre: { minX: -mitjaX, maxX: mitjaX, minY: -mitjaY, maxY: mitjaY },
     aMetres: (punt) => {
       const [px, py] = pixelMercator(punt, zoom);
