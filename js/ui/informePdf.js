@@ -20,7 +20,8 @@
 //   informe.titol('Dades');
 //   informe.taula([['Superfície', '1.234 m²'], ...]);
 //   informe.dibuix([{ punts: [[x, y], ...], color: '#d9a514' }]);
-//   informe.mapa({ imatge: await carregarImatge(urlOrtofoto(requadre).url), requadre, anells });
+//   const { blob, requadre, aMetres } = await mapaTesseles('pnoa', centre, { ample: 300, alt: 186 });
+//   informe.mapa({ imatge: await imatgeDeBlob(blob), requadre, anells: [{ punts: anell.map(aMetres), color }] });
 //   await informe.desar('parcela.pdf', { peu: 'Dades: Dirección General del Catastro.' });
 import { t, idiomaActual } from '../i18n/i18n.js';
 import { descarregarFitxer } from './descarrega.js';
@@ -87,14 +88,12 @@ export function requadreAmbProporcio(punts, proporcio, { marge = 0.15, minim = 0
 }
 
 /**
- * Baixa una imatge (d'un servei amb CORS) per posar-la a l'informe.
+ * Una imatge (Blob JPEG) a punt per a l'informe: per a mapa() (vegeu
+ * mapaTesseles a serveis/ortofoto.js) o imatges().
  * @returns {Promise<{dades: string, ample: number, alt: number}>} data URL i mida en píxels
  */
-export async function carregarImatge(url, { espera = 30000 } = {}) {
-  const resposta = await fetch(url, { signal: AbortSignal.timeout(espera) });
-  if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
-  const blob = await resposta.blob();
-  if (!blob.type.startsWith('image/')) throw new Error(blob.type || 'no és una imatge');
+export async function imatgeDeBlob(blob) {
+  if (!blob?.type.startsWith('image/')) throw new Error(blob?.type || 'no és una imatge');
   const mida = await createImageBitmap(blob);
   const { width: ample, height: alt } = mida;
   mida.close?.();
@@ -222,10 +221,10 @@ export async function crearInforme({ app, titol, nom, subtitol = null, data = ne
     /**
      * Un mapa: una imatge (ortofoto, mapa topogràfic...) que cobreix exactament
      * el requadre, amb anells i marques a sobre, barra d'escala i nord. Les
-     * coordenades són en metres, en el sistema de la imatge (UTM), i el nord de
-     * la quadrícula queda amunt. L'alçada surt de la proporció del requadre
-     * (vegeu requadreAmbProporcio).
-     * @param {{dades: string}} imatge data URL JPEG (vegeu carregarImatge)
+     * coordenades són en metres, en el pla de la imatge, amb el nord amunt
+     * (vegeu mapaTesseles a serveis/ortofoto.js). L'alçada surt de la
+     * proporció del requadre.
+     * @param {{dades: string}} imatge data URL JPEG (vegeu imatgeDeBlob)
      * @param {{minX: number, minY: number, maxX: number, maxY: number}} requadre
      * @param {{punts: [number, number][], color: string, gruix?: number}[]} [anells]
      * @param {{punt: [number, number], radi: number, color: string}[]} [marques] cercles (radi en mm)
