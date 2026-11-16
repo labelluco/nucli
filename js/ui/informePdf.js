@@ -20,6 +20,7 @@
 //   informe.titol('Dades');
 //   informe.taula([['Superfície', '1.234 m²'], ...]);
 //   informe.dibuix([{ punts: [[x, y], ...], color: '#d9a514' }]);
+//   informe.mapa({ imatge: await carregarImatge(urlOrtofoto(requadre).url), requadre, anells });
 //   await informe.desar('parcela.pdf', { peu: 'Dades: Dirección General del Catastro.' });
 import { t, idiomaActual } from '../i18n/i18n.js';
 import { descarregarFitxer } from './descarrega.js';
@@ -63,6 +64,47 @@ export function textPdf(text) {
     .map((c) => (c.codePointAt(0) <= 0xff || WINDOWS_1252.includes(c) ? c : '?'))
     .join('')
     .replace(/[\u0080-\u009f]/g, '');
+}
+
+/**
+ * Requadre dels punts amb un marge, d'una mida mínima i amb la proporció
+ * alçada / amplada demanada (per a mapa()). Càlcul pur.
+ * @param {[number, number][]} punts En metres
+ * @param {number} proporcio alçada / amplada
+ * @param {{marge?: number, minim?: number}} [opcions] marge: fracció de la mida
+ *   a cada costat; minim: amplada mínima en metres
+ */
+export function requadreAmbProporcio(punts, proporcio, { marge = 0.15, minim = 0 } = {}) {
+  const xs = punts.map((p) => p[0]);
+  const ys = punts.map((p) => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  let ample = (Math.max(...xs) - Math.min(...xs)) * (1 + 2 * marge);
+  let alt = (Math.max(...ys) - Math.min(...ys)) * (1 + 2 * marge);
+  ample = Math.max(ample, alt / proporcio, minim, 1);
+  alt = ample * proporcio;
+  return { minX: cx - ample / 2, maxX: cx + ample / 2, minY: cy - alt / 2, maxY: cy + alt / 2 };
+}
+
+/**
+ * Baixa una imatge (d'un servei amb CORS) per posar-la a l'informe.
+ * @returns {Promise<{dades: string, ample: number, alt: number}>} data URL i mida en píxels
+ */
+export async function carregarImatge(url, { espera = 30000 } = {}) {
+  const resposta = await fetch(url, { signal: AbortSignal.timeout(espera) });
+  if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+  const blob = await resposta.blob();
+  if (!blob.type.startsWith('image/')) throw new Error(blob.type || 'no és una imatge');
+  const mida = await createImageBitmap(blob);
+  const { width: ample, height: alt } = mida;
+  mida.close?.();
+  const dades = await new Promise((resoldre, rebutjar) => {
+    const lector = new FileReader();
+    lector.onload = () => resoldre(lector.result);
+    lector.onerror = () => rebutjar(lector.error);
+    lector.readAsDataURL(blob);
+  });
+  return { dades, ample, alt };
 }
 
 /**
@@ -178,6 +220,24 @@ export async function crearInforme({ app, titol, nom, subtitol = null, data = ne
     },
 
     /**
+     * Un mapa: una imatge (ortofoto, mapa topogràfic...) que cobreix exactament
+     * el requadre, amb anells i marques a sobre, barra d'escala i nord. Les
+     * coordenades són en metres, en el sistema de la imatge (UTM), i el nord de
+     * la quadrícula queda amunt. L'alçada surt de la proporció del requadre
+     * (vegeu requadreAmbProporcio).
+     * @param {{dades: string}} imatge data URL JPEG (vegeu carregarImatge)
+     * @param {{minX: number, minY: number, maxX: number, maxY: number}} requadre
+     * @param {{punts: [number, number][], color: string, gruix?: number}[]} [anells]
+     * @param {{punt: [number, number], radi: number, color: string}[]} [marques] cercles (radi en mm)
+     */
+    mapa({ imatge, requadre, anells = [], marques = [] }) {
+      const alcada = (AMPLE_UTIL * (requadre.maxY - requadre.minY)) / (requadre.maxX - requadre.minX);
+      assegurarEspai(alcada + 4);
+      dibuixarMapa(doc, { imatge, requadre, anells, marques }, { x: MARGE, y, ample: AMPLE_UTIL, alt: alcada });
+      y += alcada + 4;
+    },
+
+    /**
      * Imatges (fotos) en columnes, amb un peu opcional sota cada una.
      * @param {{dades: string, ample: number, alt: number, peu?: string}[]} imatges
      *   dades: data URL JPEG; ample i alt: en píxels (per a la proporció).
@@ -222,7 +282,6 @@ export async function crearInforme({ app, titol, nom, subtitol = null, data = ne
 }
 
 function dibuixarAEscala(doc, anells, caixa) {
-  const nf = (valor) => valor.toLocaleString(idiomaActual(), { maximumFractionDigits: 0 });
   const tots = anells.flatMap((a) => a.punts);
   const minX = Math.min(...tots.map((p) => p[0]));
   const maxX = Math.max(...tots.map((p) => p[0]));
@@ -235,6 +294,30 @@ function dibuixarAEscala(doc, anells, caixa) {
   const aPagina = ([x, y]) => [cx + (x - (minX + maxX) / 2) * escala, cy - (y - (minY + maxY) / 2) * escala];
 
   doc.setDrawColor(...COLOR_LINIA).setLineWidth(0.2).rect(caixa.x, caixa.y, caixa.ample, caixa.alt);
+  dibuixarAnells(doc, anells, aPagina);
+  dibuixarEscalaINord(doc, caixa, escala);
+}
+
+/** Un mapa: la imatge del requadre a tota la caixa, amb els anells i les marques a sobre. */
+function dibuixarMapa(doc, { imatge, requadre, anells, marques }, caixa) {
+  const escala = caixa.ample / (requadre.maxX - requadre.minX);
+  const aPagina = ([x, y]) => [caixa.x + (x - requadre.minX) * escala, caixa.y + (requadre.maxY - y) * escala];
+  doc.addImage(imatge.dades, 'JPEG', caixa.x, caixa.y, caixa.ample, caixa.alt);
+  dibuixarAnells(doc, anells, aPagina);
+  for (const { punt, radi, color, gruix = 0.8 } of marques) {
+    const [x, y] = aPagina(punt);
+    doc.setDrawColor(255).setLineWidth(gruix + 0.8).circle(x, y, radi, 'S');
+    doc.setDrawColor(...hexARgb(color)).setLineWidth(gruix).circle(x, y, radi, 'S');
+  }
+  // L'escala i el nord sobre un fons blanc, perquè es llegeixin sobre la foto.
+  doc.setFillColor(255, 255, 255);
+  doc.rect(caixa.x + 1.5, caixa.y + caixa.alt - 11, caixa.ample / 4 + 6, 9.5, 'F');
+  doc.rect(caixa.x + caixa.ample - 11, caixa.y + 1.5, 8, 13, 'F');
+  dibuixarEscalaINord(doc, caixa, escala);
+  doc.setDrawColor(...COLOR_LINIA).setLineWidth(0.2).rect(caixa.x, caixa.y, caixa.ample, caixa.alt);
+}
+
+function dibuixarAnells(doc, anells, aPagina) {
   for (const { punts, color, gruix = 0.6, discontinu = false } of anells) {
     if (punts.length < 2) continue;
     const enPagina = punts.map(aPagina);
@@ -244,7 +327,11 @@ function dibuixarAEscala(doc, anells, caixa) {
     doc.lines(relatius, enPagina[0][0], enPagina[0][1], [1, 1], 'S', true);
     if (discontinu) doc.setLineDashPattern([], 0);
   }
+}
 
+/** La barra d'escala (a baix a l'esquerra) i la fletxa del nord (a dalt a la dreta). escala: mm per metre. */
+function dibuixarEscalaINord(doc, caixa, escala) {
+  const nf = (valor) => valor.toLocaleString(idiomaActual(), { maximumFractionDigits: 0 });
   // Barra d'escala: una longitud "rodona" de més o menys un quart de l'ample.
   const objectiu = caixa.ample / 4 / escala;
   const potencia = 10 ** Math.floor(Math.log10(objectiu));
@@ -254,7 +341,8 @@ function dibuixarAEscala(doc, anells, caixa) {
   doc.setDrawColor(0).setLineWidth(0.5).line(xb, yb, xb + metres * escala, yb);
   doc.setLineWidth(0.3).line(xb, yb - 1, xb, yb + 1).line(xb + metres * escala, yb - 1, xb + metres * escala, yb + 1);
   doc.setTextColor(0).setFont('helvetica', 'normal').setFontSize(7.5);
-  doc.text(`${textPdf(nf(metres))} m`, xb + (metres * escala) / 2, yb - 1.6, { align: 'center' });
+  const text = metres >= 1000 ? `${textPdf(nf(metres / 1000))} km` : `${textPdf(nf(metres))} m`;
+  doc.text(text, xb + (metres * escala) / 2, yb - 1.6, { align: 'center' });
   // Nord.
   const xn = caixa.x + caixa.ample - 7;
   const yn = caixa.y + 5;

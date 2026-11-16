@@ -19,6 +19,7 @@
 
 const URL_WMS_PNOA = 'https://www.ign.es/wms-inspire/pnoa-ma';
 const URL_WMS_EOX = 'https://tiles.maps.eox.at/wms';
+const URL_WMS_IGN_BASE = 'https://www.ign.es/wms-inspire/ign-base';
 
 // L'IGN ofereix la PNOA de les Canàries en REGCAN95 (EPSG:4083), que a
 // escala de centímetres coincideix amb l'EPSG:32628 que fem servir allà.
@@ -26,6 +27,7 @@ const CRS_WMS_PNOA = { 'EPSG:25830': 'EPSG:25830', 'EPSG:32628': 'EPSG:4083' };
 
 // Textos d'atribució oficials de cada font (no es tradueixen).
 export const ATRIBUCIO_PNOA = 'PNOA © Instituto Geográfico Nacional (CC BY 4.0)';
+export const ATRIBUCIO_IGN_BASE = 'IGN-Base © Instituto Geográfico Nacional (CC BY 4.0)';
 export const ATRIBUCIO_SENTINEL2 =
   'Sentinel-2 cloudless 2016 by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016), CC BY 4.0';
 
@@ -85,6 +87,34 @@ export function urlSentinel2(requadre, maxPixels = 1024) {
     FORMAT: 'image/jpeg',
   });
   return { url: `${URL_WMS_EOX}?${params.toString()}`, amplada, alcada };
+}
+
+/**
+ * El mapa topogràfic de l'IGN (IGN-Base, Espanya) d'un requadre, per a mapes
+ * de situació (els informes). Com la PNOA, admet CORS (comprovat el
+ * 2026-11-16). No és una imatge aèria, però ve del mateix servei i es
+ * demana igual.
+ * @param {{minX: number, minY: number, maxX: number, maxY: number}} requadre En metres, en el sistema crs
+ * @param {number} [maxPixels]
+ * @param {string} [crs]
+ * @returns {{url: string, amplada: number, alcada: number}}
+ */
+export function urlMapaIgn(requadre, maxPixels = 1600, crs = 'EPSG:25830') {
+  // Pensat per a escales de 1:10.000 a 1:50.000: més d'1 m/píxel no aporta res.
+  const { amplada, alcada } = mides(requadre.maxX - requadre.minX, requadre.maxY - requadre.minY, 1, maxPixels);
+  const params = new URLSearchParams({
+    SERVICE: 'WMS',
+    VERSION: '1.3.0',
+    REQUEST: 'GetMap',
+    LAYERS: 'IGNBaseTodo',
+    STYLES: '',
+    CRS: CRS_WMS_PNOA[crs] ?? crs,
+    BBOX: `${requadre.minX},${requadre.minY},${requadre.maxX},${requadre.maxY}`,
+    WIDTH: String(amplada),
+    HEIGHT: String(alcada),
+    FORMAT: 'image/jpeg',
+  });
+  return { url: `${URL_WMS_IGN_BASE}?${params.toString()}`, amplada, alcada };
 }
 
 // --- PNOA per tessel·les (WMTS) ---------------------------------------
