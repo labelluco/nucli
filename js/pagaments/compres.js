@@ -2,7 +2,7 @@
 // producte, p. ex. "exportacio") de COM es cobra (un proveïdor), perquè
 // la mateixa app pugui cobrar per Google Play (quan s'instal·la des de
 // la Play Store, on Google obliga a fer servir Play Billing) i per un
-// proveïdor web (Lemon Squeezy, Paddle...) quan s'obre al navegador.
+// proveïdor web (Polar) quan s'obre al navegador.
 //
 // Límit honest d'aquest disseny: el codi arriba sencer al dispositiu (a la
 // web, com a JavaScript) i tot hi passa, de manera que algú amb
@@ -183,44 +183,48 @@ export class ProveidorPlay {
 const CONNECTOR_PLAY = 'NativePurchases';
 
 /**
- * Proveïdor web amb Lemon Squeezy, sense servidor propi:
- *  - comprar: obre el checkout de Lemon Squeezy (l'URL del producte) en una
- *    pestanya nova. Després de pagar, Lemon Squeezy dona una clau de
- *    llicència (al rebut i per correu), que l'usuari enganxa a l'app;
- *  - activarLlicencia: l'activa amb la License API pública
- *    (/v1/licenses/activate), que no necessita cap clau secreta, i la desa
- *    al dispositiu. Només desbloqueja si la llicència és de la nostra botiga
- *    i d'un producte d'aquesta app: si no, qualsevol clau de qualsevol
- *    botiga de Lemon Squeezy serviria;
+ * Proveïdor web amb Polar (polar.sh), sense servidor propi. Polar fa de
+ * venedor davant del client (cobra i liquida l'IVA) i, amb cada compra,
+ * dona una clau de llicència (un «benefit» de tipus License Keys):
+ *  - comprar: obre l'enllaç de checkout del producte en una pestanya nova.
+ *    Després de pagar, Polar dona la clau (a la pàgina de la compra i per
+ *    correu), que l'usuari enganxa a l'app;
+ *  - activarLlicencia: l'activa en aquest dispositiu amb l'API pública de
+ *    llicències (customer-portal/license-keys/activate), que no necessita
+ *    cap clau secreta, i la desa al dispositiu. Només desbloqueja si la clau
+ *    és de la nostra organització i del benefit d'un producte d'aquesta
+ *    app: si no, una clau d'una altra app (o d'una altra organització de
+ *    Polar) també serviria;
  *  - compresActives: les llicències desades. Un cop al dia es tornen a
- *    validar (/v1/licenses/validate) en segon pla; si Lemon Squeezy diu que
- *    una ja no és vàlida (reemborsada, desactivada), s'esborra i deixa de
- *    comptar a la següent càrrega. Sense connexió, es confia en la desada;
+ *    validar (.../validate) en segon pla; si Polar diu que una ja no és
+ *    vàlida (reemborsada, revocada, activació esborrada), s'esborra i deixa
+ *    de comptar a la següent càrrega. Sense connexió, es confia en la desada;
  *  - restaurar: valida ara les desades. En un dispositiu nou, l'usuari hi
- *    enganxa la mateixa clau (cada activació ocupa una de les instàncies
- *    que permet el producte a Lemon Squeezy).
+ *    enganxa la mateixa clau (cada activació ocupa un dels dispositius que
+ *    permet el benefit; el límit es posa a Polar).
  *
- * Configuració (a l'app): lemon = {botiga: id numèric de la botiga} i, a
- * cada producte, lemon = {producte: id numèric, checkout: URL /buy/...}.
- * Els productes del mode test de Lemon Squeezy tenen uns altres ids que els
- * de producció: s'han de canviar en passar a producció.
+ * Configuració (a l'app): polar = {organitzacio: id, sandbox: boolean} i, a
+ * cada producte, polar = {benefici: id del benefit de llicències, checkout:
+ * URL de l'enllaç de checkout}. Els ids del sandbox (proves) i els de
+ * producció són diferents. Cap d'aquests valors és secret.
  */
-export class ProveidorLemonSqueezy {
-  constructor(app, { botiga, productes }) {
-    this.nom = 'lemonsqueezy';
+export class ProveidorPolar {
+  constructor(app, { organitzacio, sandbox, productes }) {
+    this.nom = 'polar';
     this.esDemo = false;
     // El diàleg de compra ha de mostrar el camp per enganxar la clau.
     this.ambLlicencia = true;
     this._app = app;
-    this._botiga = botiga;
+    this._organitzacio = organitzacio;
+    this._api = sandbox ? API_POLAR_SANDBOX : API_POLAR;
     this._productes = productes;
-    this._clau = `${app}-llicencies-lemon`;
+    this._clau = `${app}-llicencies-polar`;
     this._memoria = [];
   }
 
-  /** Cert si la configuració té la botiga i, com a mínim, un producte amb id i checkout. */
+  /** Cert si la configuració té l'organització i, com a mínim, un producte amb benefit i checkout. */
   configurat() {
-    return Boolean(this._botiga) && this._productes.some((p) => p.lemon?.producte && p.lemon?.checkout);
+    return Boolean(this._organitzacio) && this._productes.some((p) => p.polar?.benefici && p.polar?.checkout);
   }
 
   _llegir() {
@@ -242,40 +246,45 @@ export class ProveidorLemonSqueezy {
   }
 
   /**
-   * Crida la License API. Torna la resposta (JSON) també quan és un error
-   * de Lemon Squeezy (4xx: clau inexistent, límit d'activacions...), i
-   * llança si no hi ha resposta clara (sense connexió, error del servidor).
+   * Crida l'API de llicències. Torna {ok, cos} també quan Polar respon amb
+   * un error (4xx: clau inexistent, límit d'activacions...), i llança si no
+   * hi ha resposta clara (sense connexió, error del servidor).
    */
-  async _api(metode, camps) {
-    const resposta = await fetch(`${API_LLICENCIES}/${metode}`, {
+  async _cridar(metode, camps) {
+    const resposta = await fetch(`${this._api}/v1/customer-portal/license-keys/${metode}`, {
       method: 'POST',
-      headers: { Accept: 'application/json' },
-      body: new URLSearchParams(camps),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ ...camps, organization_id: this._organitzacio }),
       signal: AbortSignal.timeout(15000),
     });
-    if (resposta.status >= 500 || resposta.status === 429) throw new Error(`Lemon Squeezy: HTTP ${resposta.status}`);
-    return resposta.json();
+    if (resposta.status >= 500 || resposta.status === 429) throw new Error(`Polar: HTTP ${resposta.status}`);
+    return { ok: resposta.ok, cos: await resposta.json().catch(() => ({})) };
   }
 
-  /** L'id de producte de l'app que correspon a la resposta, o null si no és d'aquesta botiga i app. */
-  _producteDe(meta) {
-    if (!meta || Number(meta.store_id) !== Number(this._botiga)) return null;
-    const trobat = this._productes.find((p) => p.lemon?.producte && Number(p.lemon.producte) === Number(meta.product_id));
+  /** L'id de producte de l'app que correspon a la llicència, o null si no és d'aquesta organització i app. */
+  _producteDe(llicencia) {
+    if (!llicencia || llicencia.organization_id !== this._organitzacio) return null;
+    const trobat = this._productes.find((p) => p.polar?.benefici && p.polar.benefici === llicencia.benefit_id);
     return trobat?.id ?? null;
+  }
+
+  /** Cert si Polar diu que la llicència està concedida i no ha caducat. */
+  _vigent(llicencia) {
+    if (llicencia?.status !== 'granted') return false;
+    return !llicencia.expires_at || Date.parse(llicencia.expires_at) > Date.now();
   }
 
   async compresActives() {
     const llicencies = this._llegir();
     if (llicencies.some((l) => Date.now() - (l.validadaEl ?? 0) > UN_DIA_MS)) {
-      this._validar().catch((error) => console.warn('ProveidorLemonSqueezy: no s\'han pogut validar les llicències', error));
+      this._validar().catch((error) => console.warn('ProveidorPolar: no s\'han pogut validar les llicències', error));
     }
     return [...new Set(llicencies.map((l) => l.producte))];
   }
 
   /**
-   * Torna a validar les llicències desades. Esborra les que Lemon Squeezy
-   * diu que no són vàlides; les que no es poden comprovar (sense connexió),
-   * es queden.
+   * Torna a validar les llicències desades. Esborra les que Polar diu que no
+   * són vàlides; les que no es poden comprovar (sense connexió), es queden.
    */
   async _validar() {
     const esborrades = new Set();
@@ -283,14 +292,14 @@ export class ProveidorLemonSqueezy {
     for (const llicencia of this._llegir()) {
       let resposta;
       try {
-        resposta = await this._api('validate', { license_key: llicencia.clau, instance_id: llicencia.instancia });
+        resposta = await this._cridar('validate', { key: llicencia.clau, activation_id: llicencia.activacio });
       } catch {
         continue;
       }
-      if (resposta.valid && this._producteDe(resposta.meta) === llicencia.producte) {
+      if (resposta.ok && this._vigent(resposta.cos) && this._producteDe(resposta.cos) === llicencia.producte) {
         validades.add(llicencia.clau);
       } else {
-        console.warn('ProveidorLemonSqueezy: llicència no vàlida, s\'esborra', resposta.error ?? resposta.license_key?.status);
+        console.warn('ProveidorPolar: llicència no vàlida, s\'esborra', resposta.cos?.status ?? resposta.cos?.detail);
         esborrades.add(llicencia.clau);
       }
     }
@@ -303,8 +312,8 @@ export class ProveidorLemonSqueezy {
   }
 
   async comprar(producte) {
-    if (!this.configurat() || !producte.lemon?.checkout) throw new Error('pagament-web-no-disponible');
-    window.open(producte.lemon.checkout, '_blank', 'noopener');
+    if (!this.configurat() || !producte.polar?.checkout) throw new Error('pagament-web-no-disponible');
+    window.open(producte.polar.checkout, '_blank', 'noopener');
     // La compra no s'acaba aquí: falta enganxar la clau (activarLlicencia).
     return false;
   }
@@ -325,20 +334,21 @@ export class ProveidorLemonSqueezy {
       if (desada) return desada.producte;
     }
 
-    const resposta = await this._api('activate', { license_key: clau, instance_name: `${this._app} web` });
-    if (!resposta.activated) {
-      if (/activation limit/i.test(resposta.error ?? '')) throw new Error('llicencia-limit');
+    const resposta = await this._cridar('activate', { key: clau, label: `${this._app} web` });
+    if (!resposta.ok) {
+      if (/activation/i.test(JSON.stringify(resposta.cos?.detail ?? ''))) throw new Error('llicencia-limit');
       throw new Error('llicencia-no-valida');
     }
-    const producte = this._producteDe(resposta.meta);
-    if (!producte) {
-      // Clau d'una altra botiga o d'una altra app: no es desa, i s'allibera
-      // l'activació perquè no ocupi lloc a qui la té.
-      this._api('deactivate', { license_key: clau, instance_id: resposta.instance?.id ?? '' }).catch(() => {});
-      throw new Error('llicencia-altre-producte');
+    const activacio = resposta.cos;
+    const llicencia = activacio.license_key;
+    const producte = this._producteDe(llicencia);
+    if (!producte || !this._vigent(llicencia)) {
+      // No es desa, i s'allibera l'activació perquè no ocupi lloc a qui té la clau.
+      this._cridar('deactivate', { key: clau, activation_id: activacio.id }).catch(() => {});
+      throw new Error(producte ? 'llicencia-no-valida' : 'llicencia-altre-producte');
     }
     const llicencies = this._llegir().filter((l) => l.clau !== clau);
-    llicencies.push({ clau, instancia: resposta.instance.id, producte, validadaEl: Date.now() });
+    llicencies.push({ clau, activacio: activacio.id, producte, validadaEl: Date.now() });
     this._desar(llicencies);
     return producte;
   }
@@ -349,7 +359,8 @@ export class ProveidorLemonSqueezy {
   }
 }
 
-const API_LLICENCIES = 'https://api.lemonsqueezy.com/v1/licenses';
+const API_POLAR = 'https://api.polar.sh';
+const API_POLAR_SANDBOX = 'https://sandbox-api.polar.sh';
 const UN_DIA_MS = 24 * 60 * 60 * 1000;
 
 export class GestorCompres {
@@ -411,27 +422,27 @@ export class GestorCompres {
  *  - "demo": no cobra res (desenvolupament, i la web mentre no hi hagi
  *    proveïdor web);
  *  - "play": Google Play Billing (només dins de l'app d'Android);
- *  - "lemonsqueezy": Lemon Squeezy (checkout + clau de llicència);
+ *  - "polar": Polar (checkout + clau de llicència);
  *  - "auto": Google Play a l'app d'Android que porti el connector i, a la
- *    resta (la web), Lemon Squeezy si l'app en passa la configuració
- *    (`lemon`) o la demostració si no (les apps que encara no en tenen).
+ *    resta (la web), Polar si l'app en passa la configuració (`polar`) o la
+ *    demostració si no (les apps que encara no en tenen).
  *    Una app nativa sense el connector de Play continua amb la demostració.
- * Amb `lemon` però sense ids (encara no creats), la web no desbloqueja res:
+ * Amb `polar` però sense ids (encara no creats), la web no desbloqueja res:
  * comprar diu que el pagament web encara no està disponible.
  *
- * @param {{app: string, proveidor: string, lemon?: {botiga: number|null}, productes?: Array<object>}} opcions
+ * @param {{app: string, proveidor: string, polar?: {organitzacio: string|null, sandbox?: boolean}, productes?: Array<object>}} opcions
  */
-export function crearProveidor({ app, proveidor, lemon = null, productes = [] }) {
-  const lemonSqueezy = () => new ProveidorLemonSqueezy(app, { botiga: lemon?.botiga ?? null, productes });
+export function crearProveidor({ app, proveidor, polar = null, productes = [] }) {
+  const polarWeb = () => new ProveidorPolar(app, { organitzacio: polar?.organitzacio ?? null, sandbox: Boolean(polar?.sandbox), productes });
   if (proveidor === 'demo') return new ProveidorDemo(app);
   if (proveidor === 'play') return new ProveidorPlay(app);
-  if (proveidor === 'lemonsqueezy') return lemonSqueezy();
+  if (proveidor === 'polar') return polarWeb();
   if (proveidor === 'auto') {
     if (ProveidorPlay.disponible()) return new ProveidorPlay(app);
     // Dins d'una app nativa (Android) mai s'ofereix el pagament web: Google
     // Play no permet cobrar continguts digitals fora de Play Billing.
     const nativa = Boolean(globalThis.Capacitor?.isNativePlatform?.());
-    return lemon && !nativa ? lemonSqueezy() : new ProveidorDemo(app);
+    return polar && !nativa ? polarWeb() : new ProveidorDemo(app);
   }
   throw new Error(`crearProveidor: el proveïdor "${proveidor}" encara no està implementat`);
 }

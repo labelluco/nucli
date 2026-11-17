@@ -2,7 +2,7 @@
 // app afegeix les seves amb configurarI18n().
 export const ES = {
   'Nord': 'Norte',
-  // Compra web amb clau de llicència (pagaments/compres.js, ProveidorLemonSqueezy)
+  // Compra web amb clau de llicència (pagaments/compres.js, ProveidorPolar)
   "Clau de llicència": "Clave de licencia",
   "Activar la clau": "Activar la clave",
   "Després de pagar rebràs la clau per correu. Enganxa-la aquí; també serveix per als teus altres dispositius.": "Después de pagar recibirás la clave por correo. Pégala aquí; también sirve para tus otros dispositivos.",
