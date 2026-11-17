@@ -20,8 +20,11 @@
 //   informe.titol('Dades');
 //   informe.taula([['Superfície', '1.234 m²'], ...]);
 //   informe.dibuix([{ punts: [[x, y], ...], color: '#d9a514' }]);
-//   const { blob, requadre, aMetres } = await mapaTesseles('pnoa', centre, { ample: 300, alt: 186 });
-//   informe.mapa({ imatge: await imatgeDeBlob(blob), requadre, anells: [{ punts: anell.map(aMetres), color }] });
+//   const { imatge, requadre, aMetres } = await mapaTesseles('pnoa', centre, { ample: 300, alt: 186 });
+//   informe.mapa({ imatge, requadre, anells: [{ punts: anell.map(aMetres), color }] });
+//
+// Les imatges (mapes i fotos) van en data URL JPEG. Per fer-les d'un canvas,
+// toDataURL i no toBlob: toBlob pot trigar un segon per imatge.
 //   await informe.desar('parcela.pdf', { peu: 'Dades: Dirección General del Catastro.' });
 import { t, idiomaActual } from '../i18n/i18n.js';
 import { descarregarFitxer } from './descarrega.js';
@@ -85,25 +88,6 @@ export function requadreAmbProporcio(punts, proporcio, { marge = 0.15, minim = 0
   ample = Math.max(ample, alt / proporcio, minim, 1);
   alt = ample * proporcio;
   return { minX: cx - ample / 2, maxX: cx + ample / 2, minY: cy - alt / 2, maxY: cy + alt / 2 };
-}
-
-/**
- * Una imatge (Blob JPEG) a punt per a l'informe: per a mapa() (vegeu
- * mapaTesseles a serveis/ortofoto.js) o imatges().
- * @returns {Promise<{dades: string, ample: number, alt: number}>} data URL i mida en píxels
- */
-export async function imatgeDeBlob(blob) {
-  if (!blob?.type.startsWith('image/')) throw new Error(blob?.type || 'no és una imatge');
-  const mida = await createImageBitmap(blob);
-  const { width: ample, height: alt } = mida;
-  mida.close?.();
-  const dades = await new Promise((resoldre, rebutjar) => {
-    const lector = new FileReader();
-    lector.onload = () => resoldre(lector.result);
-    lector.onerror = () => rebutjar(lector.error);
-    lector.readAsDataURL(blob);
-  });
-  return { dades, ample, alt };
 }
 
 /**
@@ -224,7 +208,7 @@ export async function crearInforme({ app, titol, nom, subtitol = null, data = ne
      * coordenades són en metres, en el pla de la imatge, amb el nord amunt
      * (vegeu mapaTesseles a serveis/ortofoto.js). L'alçada surt de la
      * proporció del requadre.
-     * @param {{dades: string}} imatge data URL JPEG (vegeu imatgeDeBlob)
+     * @param {{dades: string}} imatge data URL JPEG (vegeu mapaTesseles)
      * @param {{minX: number, minY: number, maxX: number, maxY: number}} requadre
      * @param {{punts: [number, number][], color: string, gruix?: number}[]} [anells]
      * @param {{punt: [number, number], radi: number, color: string}[]} [marques] cercles (radi en mm)
