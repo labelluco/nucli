@@ -35,7 +35,7 @@ js/
 │   ├── terreny.js        Graella d'altituds amb interpolació bilineal
 │   ├── gradients.js      Pendent i orientació per cel·la (mètode de Horn)
 │   └── solid.js          Model 3D: triangulació restringida + sòlid tancat
-├── exportadors/      stl.js (binari, mm) · obj.js (metres, amb UV) · zip.js (sense compressió)
+├── exportadors/      stl.js (binari, mm) · 3mf.js (mm, diversos objectes) · obj.js (metres, amb UV) · zip.js (sense compressió)
 ├── model/zona.js     Una zona (parcel·la o polígon dibuixat), amb el seu sistema (crs)
 ├── paisos/paisos.js  Països amb dades pròpies (Espanya) i la resta del món
 ├── pagaments/        GestorCompres + proveïdors (de moment, demo)
